@@ -389,15 +389,6 @@ fun StockFormSheet(
 
                         FoodKindSummary(conversionText, icon = AppIcons.Sync)
                     }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        NumberField(
-                            value = packageSizeInput,
-                            onValueChange = { packageSizeInput = it },
-                            label = "This batch: one package holds (${selectedFood.baseUnit})",
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
                 }
             }
             Spacer(Modifier.height(8.dp))

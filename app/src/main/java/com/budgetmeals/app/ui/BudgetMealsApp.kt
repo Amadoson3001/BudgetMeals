@@ -14,20 +14,39 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,9 +60,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -52,10 +68,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SheetValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlin.math.absoluteValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +90,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -291,6 +313,13 @@ fun BudgetMealsApp(
         }
     }
 
+    LaunchedEffect(pagerState.currentPage) {
+        val settledTab = MainTab.entries.getOrNull(pagerState.currentPage) ?: MainTab.HOME
+        if (mainRoute != settledTab.route) {
+            mainRoute = settledTab.route
+        }
+    }
+
     BackHandler(enabled = detailRoute == null && sheet == null && (pagerState.currentPage != 0 || mainRoute != MainTab.HOME.route)) {
         openMainTab(MainTab.HOME)
     }
@@ -360,9 +389,27 @@ fun BudgetMealsApp(
             .onSizeChanged { detailContentWidth = it.width }
     ) {
         // --- BASE LAYER: Scaffold with Main Tabs & Navigation Bar ---
-        val baseScale = if (isPredictiveBackActive) (0.94f + 0.06f * predictiveBackProgress.value) else 1.0f
-        val baseCornerRadius = if (isPredictiveBackActive) ((20f * (1f - predictiveBackProgress.value)).dp) else 0.dp
-        val baseScrimAlpha = if (isPredictiveBackActive) (0.22f * (1f - predictiveBackProgress.value)) else 0.0f
+        val hasDetail = detailRoute != null
+        val animatedDetailProgress by animateFloatAsState(
+            targetValue = if (hasDetail) 1f else 0f,
+            animationSpec = tween(durationMillis = 280, easing = Motion.EmphasizedDecelerate),
+            label = "baseLayerRecede",
+        )
+        val baseScale = if (isPredictiveBackActive) {
+            0.94f + 0.06f * predictiveBackProgress.value
+        } else {
+            1.0f - (0.06f * animatedDetailProgress)
+        }
+        val baseCornerRadius = if (isPredictiveBackActive) {
+            (20f * (1f - predictiveBackProgress.value)).dp
+        } else {
+            (20f * animatedDetailProgress).dp
+        }
+        val baseScrimAlpha = if (isPredictiveBackActive) {
+            0.25f * (1f - predictiveBackProgress.value)
+        } else {
+            0.25f * animatedDetailProgress
+        }
 
         Scaffold(
             modifier = Modifier
@@ -405,7 +452,18 @@ fun BudgetMealsApp(
                             contentColor = MaterialTheme.colorScheme.onPrimary,
                             shape = RoundedCornerShape(20.dp),
                             icon = { Icon(AppIcons.Add, contentDescription = null) },
-                            text = { Text(fab.first, style = MaterialTheme.typography.labelLarge) },
+                            text = {
+                                AnimatedContent(
+                                    targetState = fab.first,
+                                    transitionSpec = {
+                                        (slideInVertically(tween(180, easing = Motion.EmphasizedDecelerate)) { it / 2 } + fadeIn(tween(140)))
+                                            .togetherWith(slideOutVertically(tween(180, easing = Motion.EmphasizedAccelerate)) { -it / 2 } + fadeOut(tween(140)))
+                                    },
+                                    label = "fabTextTransition",
+                                ) { labelText ->
+                                    Text(labelText, style = MaterialTheme.typography.labelLarge)
+                                }
+                            },
                         )
                     }
                 }
@@ -416,49 +474,21 @@ fun BudgetMealsApp(
                     enter = slideInVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedDecelerate)) { it } + fadeIn(tween(Motion.ShortMs)),
                     exit = slideOutVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedAccelerate)) { it } + fadeOut(tween(Motion.ShortMs)),
                 ) {
-                    NavigationBar(
-                        containerColor = cardSurfaceColor(),
-                        tonalElevation = 0.dp,
-                    ) {
-                        val activeTab = MainTab.entries.getOrElse(if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) { MainTab.HOME }
-                        MainTab.entries.forEach { tab ->
-                            val selected = activeTab == tab && detailRoute == null
-                            val badgeCount = if (tab == MainTab.SHOP) uiState.snapshot.openShoppingCount else 0
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { openMainTab(tab) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                ),
-                                icon = {
-                                    BadgedBox(
-                                        badge = {
-                                            if (badgeCount > 0) {
-                                                Badge { Text(if (badgeCount > 99) "99+" else badgeCount.toString()) }
-                                            }
-                                        },
-                                    ) {
-                                        Icon(
-                                            imageVector = tabIcon(tab, selected = selected),
-                                            modifier = Modifier.size(24.dp),
-                                            contentDescription = null,
-                                        )
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        tab.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                    )
-                                },
-                            )
+                    val scrollProgress = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, (MainTab.entries.size - 1).toFloat())
+                    val currentTab = MainTab.entries.getOrElse(
+                        if (pagerState.isScrollInProgress) {
+                            pagerState.targetPage
+                        } else {
+                            pagerState.currentPage
                         }
-                    }
+                    ) { MainTab.HOME }
+
+                    InteractiveBottomBar(
+                        currentTab = currentTab,
+                        scrollProgress = scrollProgress,
+                        badgeCount = uiState.snapshot.openShoppingCount,
+                        onTabSelected = { openMainTab(it) },
+                    )
                 }
             },
         ) { paddingValues ->
@@ -482,15 +512,23 @@ fun BudgetMealsApp(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clipToBounds(),
-                            userScrollEnabled = false,
+                            userScrollEnabled = true,
                             beyondViewportPageCount = 4,
                             key = { page -> MainTab.entries[page].route },
                         ) { page ->
                             val tab = MainTab.entries[page]
+                            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                            val pageScale = (1f - 0.05f * pageOffset.coerceIn(0f, 1f))
+                            val pageAlpha = (1f - 0.35f * pageOffset.coerceIn(0f, 1f))
                             Surface(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .graphicsLayer { clip = true },
+                                    .graphicsLayer {
+                                        scaleX = pageScale
+                                        scaleY = pageScale
+                                        alpha = pageAlpha
+                                        clip = true
+                                    },
                                 color = MaterialTheme.colorScheme.background,
                             ) {
                                 when (tab) {
@@ -583,15 +621,28 @@ fun BudgetMealsApp(
             targetState = detailRoute,
             transitionSpec = {
                 if (initialState == null && targetState != null) {
-                    Motion.DetailEnterForward togetherWith Motion.DetailExitForward
+                    (slideInHorizontally(tween(320, easing = Motion.EmphasizedDecelerate)) { (it * 0.9f).toInt() } +
+                        fadeIn(tween(240)) +
+                        scaleIn(tween(320, easing = Motion.EmphasizedDecelerate), initialScale = 0.94f))
+                        .togetherWith(
+                            fadeOut(tween(180, easing = Motion.EmphasizedAccelerate)) +
+                                scaleOut(tween(260), targetScale = 0.96f)
+                        )
                 } else if (initialState != null && targetState == null) {
                     if (gestureCommitted) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
-                        Motion.DetailEnterBackward togetherWith Motion.DetailExitBackward
+                        (fadeIn(tween(220, easing = Motion.EmphasizedDecelerate)) +
+                            scaleIn(tween(260, easing = Motion.EmphasizedDecelerate), initialScale = 0.96f))
+                            .togetherWith(
+                                slideOutHorizontally(tween(280, easing = Motion.EmphasizedAccelerate)) { it } +
+                                    fadeOut(tween(200)) +
+                                    scaleOut(tween(280), targetScale = 0.94f)
+                            )
                     }
                 } else {
-                    Motion.tabEnter(true) togetherWith Motion.tabExit(true)
+                    (slideInHorizontally(tween(260, easing = Motion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)))
+                        .togetherWith(slideOutHorizontally(tween(260, easing = Motion.EmphasizedAccelerate)) { -it } + fadeOut(tween(200)))
                 }
             },
             label = "detailOverlay",
@@ -663,17 +714,50 @@ fun BudgetMealsApp(
         }
     }
 
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val halfScreenHeightPx = remember(density, configuration) {
+        with(density) { configuration.screenHeightDp.dp.toPx() * 0.5f }
+    }
+    val dragSlopPx = remember(density) {
+        with(density) { 8.dp.toPx() }
+    }
+    var sheetContentHeightPx by remember(sheetGeneration) { mutableFloatStateOf(0f) }
+    var sheetStateRef by remember(sheetGeneration) { mutableStateOf<androidx.compose.material3.SheetState?>(null) }
     var sheetDismissGuard by remember(sheetGeneration) { mutableStateOf<(() -> Unit)?>(null) }
+    val sheetBehavior = remember(sheetGeneration) { SheetScrollBehavior() }
     val sheetState = key(sheetGeneration) {
-        rememberModalBottomSheetState(
+        val state = rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
             confirmValueChange = { nextValue ->
-                if (nextValue == SheetValue.Hidden && sheetDismissGuard != null && closingSheetGeneration != sheetGeneration) {
-                    sheetDismissGuard?.invoke()
-                    false
+                if (nextValue == SheetValue.Hidden && closingSheetGeneration != sheetGeneration) {
+                    if (sheetDismissGuard != null) {
+                        sheetDismissGuard?.invoke()
+                        false
+                    } else {
+                        val currentOffset = try {
+                            sheetStateRef?.requireOffset() ?: 0f
+                        } catch (_: Exception) {
+                            0f
+                        }
+                        val isFingerDrag = sheetBehavior.isRecentPhysicalDragDown() && currentOffset > dragSlopPx
+                        if (isFingerDrag) {
+                            val dismissThreshold = if (sheetContentHeightPx > 0f) {
+                                minOf(halfScreenHeightPx, sheetContentHeightPx * 0.5f)
+                            } else {
+                                halfScreenHeightPx
+                            }
+                            currentOffset >= dismissThreshold
+                        } else {
+                            // Predictive back gesture, hardware back, scrim tap, or programmatic hide
+                            true
+                        }
+                    }
                 } else true
             },
         )
+        sheetStateRef = state
+        state
     }
     val sheetScope = rememberCoroutineScope()
     val closeSheet: () -> Unit = close@{
@@ -710,6 +794,10 @@ fun BudgetMealsApp(
                 }
             },
             sheetState = sheetState,
+            behavior = sheetBehavior,
+            modifier = Modifier.onSizeChanged { size ->
+                sheetContentHeightPx = size.height.toFloat()
+            },
         ) {
             AnimatedContent(
                 targetState = currentSheet,
@@ -754,4 +842,188 @@ private fun tabIcon(tab: MainTab, selected: Boolean) = when (tab) {
     MainTab.STOCK -> if (selected) AppIcons.Inventory2Filled else AppIcons.Inventory2
     MainTab.SHOP -> if (selected) AppIcons.ShoppingCartFilled else AppIcons.ShoppingCart
     MainTab.MORE -> if (selected) AppIcons.GridViewFilled else AppIcons.GridView
+}
+
+@Composable
+private fun InteractiveBottomBar(
+    currentTab: MainTab,
+    scrollProgress: Float,
+    badgeCount: Int,
+    onTabSelected: (MainTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = cardSurfaceColor(),
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.extendedColors.cardBorder.copy(alpha = 0.5f)),
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(68.dp),
+        ) {
+            val tabCount = MainTab.entries.size
+            val tabWidth = maxWidth / tabCount
+            val pillWidth = 56.dp
+            val pillHeight = 32.dp
+
+            val targetPosition = scrollProgress.coerceIn(0f, (tabCount - 1).toFloat())
+            val animatedPosition by animateFloatAsState(
+                targetValue = targetPosition,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+                label = "navPillPosition",
+            )
+
+            // Animated sliding capsule/pill indicator
+            val pillOffset = (tabWidth * animatedPosition) + ((tabWidth - pillWidth) / 2)
+            Box(
+                modifier = Modifier
+                    .offset(x = pillOffset, y = 6.dp)
+                    .size(width = pillWidth, height = pillHeight)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                    ),
+            )
+
+            // Tabs row
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MainTab.entries.forEach { tab ->
+                    val selected = currentTab == tab
+                    val badge = if (tab == MainTab.SHOP) badgeCount else 0
+                    InteractiveTabItem(
+                        tab = tab,
+                        selected = selected,
+                        badgeCount = badge,
+                        onClick = { onTabSelected(tab) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InteractiveTabItem(
+    tab: MainTab,
+    selected: Boolean,
+    badgeCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    // Bouncy scale on selection or touch press
+    val scale by animateFloatAsState(
+        targetValue = when {
+            isPressed -> 0.88f
+            selected -> 1.12f
+            else -> 1.0f
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "tabItemScale",
+    )
+
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(durationMillis = 180),
+        label = "tabItemIconTint",
+    )
+
+    val labelColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+        },
+        animationSpec = tween(durationMillis = 180),
+        label = "tabItemLabelColor",
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            BadgedBox(
+                badge = {
+                    if (badgeCount > 0) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ) {
+                            Text(
+                                if (badgeCount > 99) "99+" else badgeCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                },
+            ) {
+                Crossfade(
+                    targetState = selected,
+                    animationSpec = tween(180),
+                    label = "tabIconCrossfade",
+                ) { isSel ->
+                    Icon(
+                        imageVector = tabIcon(tab, selected = isSel),
+                        contentDescription = tab.label,
+                        tint = iconTint,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(3.dp))
+
+        Text(
+            text = tab.label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = labelColor,
+            maxLines = 1,
+            modifier = Modifier.graphicsLayer {
+                val labelScale = if (selected) 1.02f else 0.98f
+                scaleX = labelScale
+                scaleY = labelScale
+            },
+        )
+    }
 }

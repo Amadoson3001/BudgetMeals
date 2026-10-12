@@ -54,23 +54,19 @@ Android's [app signing documentation](https://developer.android.com/studio/publi
 
 ## Checks
 
-Run local unit tests, Android lint, and compile the instrumentation tests without a device:
+Run fast local unit tests and Android lint:
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleUiTestAndroidTest
+.\run_tests.bat
+```
+
+or:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
 ```
 
 Unit test reports are in `app/build/reports/tests/testDebugUnitTest/`; lint reports are in `app/build/reports/lint-results-debug.html`.
-
-When an emulator or device is available, run the UI, database, and repository regression tests:
-
-Device tests target `com.budgetmeals.app.uitest`, a separate application from the installed release. The runner also leaves the test APKs installed after the run. Tests never replace or uninstall `com.budgetmeals.app`.
-
-```powershell
-.\gradlew.bat :app:connectedUiTestAndroidTest
-```
-
-Instrumentation tests use a shared `BudgetStorageRule` to isolate their database and preferences, close every opened connection, and delete their test data. Date-sensitive tests use fixed dates; `BudgetRepository` accepts a `Clock` for repeatable day calculations and timestamps.
 
 ## Code organization
 

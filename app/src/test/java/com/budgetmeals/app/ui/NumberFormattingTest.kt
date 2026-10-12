@@ -53,4 +53,35 @@ class NumberFormattingTest {
         assertEquals(0.0, "NaN".asDouble(), 0.0)
         assertEquals(0.0, "Infinity".asDouble(), 0.0)
     }
+
+    @Test
+    fun percentInputAllowsRemovingAllNumbersAndEditingFrom90To80() {
+        // User starts at 90, backspaces to 9, removes all numbers to empty string, then enters 80
+        assertEquals("9", percentInput("9"))
+        assertEquals("", percentInput(""))
+        assertEquals("8", percentInput("8"))
+        assertEquals("80", percentInput("80"))
+    }
+
+    @Test
+    fun percentInputClampsAndHandlesEdgeCases() {
+        assertEquals("0", percentInput("0"))
+        assertEquals("100", percentInput("100"))
+        assertEquals("100", percentInput("150"))
+        assertEquals("8", percentInput("08"))
+        assertEquals("80", percentInput("\u0668\u0660"))
+    }
+
+    @Test
+    fun parsePercentHandlesFallbacksAndRanges() {
+        assertEquals(25, null.parsePercent(25))
+        assertEquals(25, "".parsePercent(25))
+        assertEquals(25, "   ".parsePercent(25))
+        assertEquals(80, "80".parsePercent(25))
+        assertEquals(0, "0".parsePercent(25))
+        assertEquals(100, "100".parsePercent(25))
+        assertEquals(100, "150".parsePercent(25))
+        assertEquals(80, "\u0668\u0660".parsePercent(25))
+    }
 }
+

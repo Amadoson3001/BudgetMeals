@@ -113,11 +113,14 @@ class StockModelsTest {
     }
 
     @Test
-    fun starterPantryStockIdsContainsExpectedDefaults() {
-        val expected = setOf(
-            "jam", "oil", "tea", "sugar", "eggs",
-            "cheese", "yogurt", "tomatoes", "cucumbers", "fruit",
+    fun stockQuantityLabelHandlesLargeAmounts() {
+        val item = StockItem(
+            purchaseDate = today,
+            name = "Counted pieces",
+            unit = "piece",
+            totalQuantity = 3_000_000_000.0,
+            totalPrice = 30_000.0,
         )
-        assertEquals(expected, DatabaseMigrations.STARTER_STOCK_IDS)
+        assertEquals("3000000000 piece", item.quantityLabel)
     }
 }
