@@ -54,19 +54,19 @@ Android's [app signing documentation](https://developer.android.com/studio/publi
 
 ## Checks
 
-Run fast local unit tests and Android lint:
+Build the debug APK and run Android lint:
 
 ```powershell
-.\run_tests.bat
+.\run_checks.bat
 ```
 
 or:
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
+.\gradlew.bat :app:assembleDebug :app:lintDebug
 ```
 
-Unit test reports are in `app/build/reports/tests/testDebugUnitTest/`; lint reports are in `app/build/reports/lint-results-debug.html`.
+Lint reports are in `app/build/reports/lint-results-debug.html`.
 
 ## Code organization
 
@@ -74,7 +74,6 @@ Unit test reports are in `app/build/reports/tests/testDebugUnitTest/`; lint repo
 - `data/AppSnapshot.kt` contains derived budget and stock summaries. JSON, CSV, and stock usage serialization live in dedicated codecs.
 - `state/BudgetViewModel.kt` serializes repository operations and error recovery; `BudgetUiState.kt` contains screen state and the meal draft.
 - `ui/SheetContent.kt` dispatches to feature-specific sheet files, using the shared `SheetScaffold.kt`. `ExportSharing.kt` handles Android export sharing.
-- Unit tests mirror the `data`, `state`, and `ui` packages and group scenarios by feature.
 
 ## First-use flow
 

@@ -42,6 +42,12 @@ object Motion {
     val SettleBackTween: TweenSpec<Float> = tween(200, easing = EmphasizedDecelerate)
     val ProgressTween: TweenSpec<Float> = tween(LongMs, easing = EmphasizedDecelerate)
     val CardExpandTween: TweenSpec<IntSize> = tween(MediumMs, easing = EmphasizedDecelerate)
+    val FabLabelSizeTween: TweenSpec<IntSize> = tween(150, easing = EmphasizedDecelerate)
+
+    // Slide labels as intact lines. No alpha, scale, delay, or spring on glyphs.
+    fun fabLabelChange(): ContentTransform =
+        slideInVertically(tween(150, easing = EmphasizedDecelerate)) { it }
+            .togetherWith(slideOutVertically(tween(150, easing = EmphasizedDecelerate)) { -it })
 
     // Restrained spring feedback; large surfaces use emphasized easing instead.
     val MicroSpring: FiniteAnimationSpec<Float> = spring(

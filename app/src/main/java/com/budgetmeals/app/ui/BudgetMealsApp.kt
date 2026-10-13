@@ -91,6 +91,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetmeals.app.data.Expense
 import com.budgetmeals.app.data.FoodCatalogItem
@@ -437,7 +439,6 @@ fun BudgetMealsApp(
                 AnimatedActionButton(
                     action = mainFab,
                     visible = isMainRoute && !uiState.isLoading && sheet == null,
-                    expanded = !pagerState.isScrollInProgress,
                     enabled = !pagerState.isScrollInProgress,
                     onAction = openSheet,
                 )
@@ -448,7 +449,6 @@ fun BudgetMealsApp(
                     enter = slideInVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedDecelerate)) { it } + fadeIn(tween(Motion.ShortMs)),
                     exit = slideOutVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedAccelerate)) { it } + fadeOut(tween(Motion.ShortMs)),
                 ) {
-                    val scrollProgress = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, (MainTab.entries.size - 1).toFloat())
                     val currentTab = MainTab.entries.getOrElse(
                         if (pagerState.isScrollInProgress) {
                             pagerState.targetPage
@@ -459,7 +459,10 @@ fun BudgetMealsApp(
 
                     InteractiveBottomBar(
                         currentTab = currentTab,
-                        scrollProgress = scrollProgress,
+                        scrollProgress = {
+                            (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                                .coerceIn(0f, (MainTab.entries.size - 1).toFloat())
+                        },
                         badgeCount = uiState.snapshot.openShoppingCount,
                         onTabSelected = { openMainTab(it) },
                     )
@@ -491,13 +494,12 @@ fun BudgetMealsApp(
                             key = { page -> MainTab.entries[page].route },
                         ) { page ->
                             val tab = MainTab.entries[page]
-                            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-                            val pageAlpha = (1f - 0.15f * pageOffset.coerceIn(0f, 1f))
                             Surface(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer {
-                                        alpha = pageAlpha
+                                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                                        alpha = 1f - 0.15f * pageOffset.coerceIn(0f, 1f)
                                         clip = true
                                     },
                                 color = MaterialTheme.colorScheme.background,
@@ -816,7 +818,7 @@ private fun tabIcon(tab: MainTab, selected: Boolean) = when (tab) {
 @Composable
 private fun InteractiveBottomBar(
     currentTab: MainTab,
-    scrollProgress: Float,
+    scrollProgress: () -> Float,
     badgeCount: Int,
     onTabSelected: (MainTab) -> Unit,
     modifier: Modifier = Modifier,
@@ -838,12 +840,16 @@ private fun InteractiveBottomBar(
             val pillWidth = 56.dp
             val pillHeight = 32.dp
 
-            val targetPosition = scrollProgress.coerceIn(0f, (tabCount - 1).toFloat())
-            // Follow the pager directly so dragging and the indicator never drift apart.
-            val pillOffset = (tabWidth * targetPosition) + ((tabWidth - pillWidth) / 2)
+            // Read progress during placement so moving the indicator doesn't recompose labels.
             Box(
                 modifier = Modifier
-                    .offset(x = pillOffset, y = 6.dp)
+                    .offset {
+                        val position = scrollProgress().coerceIn(0f, (tabCount - 1).toFloat())
+                        IntOffset(
+                            x = (tabWidth.toPx() * position + (tabWidth - pillWidth).toPx() / 2).roundToInt(),
+                            y = 6.dp.roundToPx(),
+                        )
+                    }
                     .size(width = pillWidth, height = pillHeight)
                     .background(
                         color = MaterialTheme.colorScheme.primaryContainer,

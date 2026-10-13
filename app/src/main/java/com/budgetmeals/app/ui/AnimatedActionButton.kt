@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -22,8 +23,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.budgetmeals.app.ui.icons.AppIcons
 import com.budgetmeals.app.ui.theme.Motion
@@ -35,7 +39,6 @@ internal fun AnimatedActionButton(
     action: FabAction?,
     visible: Boolean,
     onAction: (AppSheet) -> Unit,
-    expanded: Boolean = true,
     enabled: Boolean = true,
 ) {
     // Retain the previous action while the FAB completes its exit (including the More tab).
@@ -46,6 +49,9 @@ internal fun AnimatedActionButton(
     val visibility = remember { MutableTransitionState(false) }
     visibility.targetState = visible && action != null
     val interactionSource = remember { MutableInteractionSource() }
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
     val pressed by interactionSource.collectIsPressedAsState()
     val pressScale by animateFloatAsState(
         targetValue = if (pressed) 0.94f else 1f,
@@ -62,13 +68,12 @@ internal fun AnimatedActionButton(
         if (displayedAction != null) {
             ExtendedFloatingActionButton(
                 onClick = { if (visible && enabled && action != null) onAction(action.sheet) },
-                expanded = expanded,
                 modifier = Modifier
                     .graphicsLayer {
                         scaleX = pressScale
                         scaleY = pressScale
                     }
-                    .then(if (!expanded) Modifier.semantics { contentDescription = displayedAction.label } else Modifier),
+                    .semantics { contentDescription = displayedAction.label },
                 shape = MaterialTheme.shapes.large,
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -85,12 +90,25 @@ internal fun AnimatedActionButton(
                     AnimatedContent(
                         targetState = displayedAction.label,
                         transitionSpec = {
-                            Motion.fadeThrough().using(SizeTransform(clip = false) { _, _ -> Motion.CardExpandTween })
+                            Motion.fabLabelChange().using(SizeTransform(clip = true) { _, _ -> Motion.FabLabelSizeTween })
                         },
-                        contentAlignment = Alignment.CenterEnd,
+                        contentAlignment = Alignment.CenterStart,
                         label = "fabAction",
                     ) { label ->
-                        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                        // Keep shaping and line measurement out of animation frames.
+                        val labelWidth = remember(label, labelStyle, textMeasurer, density) {
+                            with(density) {
+                                textMeasurer.measure(label, style = labelStyle, softWrap = false, maxLines = 1)
+                                    .size.width.toDp()
+                            }
+                        }
+                        Text(
+                            label,
+                            style = labelStyle,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.requiredWidth(labelWidth).clearAndSetSemantics { },
+                        )
                     }
                 },
             )
