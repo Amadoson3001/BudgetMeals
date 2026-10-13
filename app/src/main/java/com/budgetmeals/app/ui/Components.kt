@@ -7,6 +7,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,7 +37,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -533,7 +535,11 @@ fun StockProgressRow(
     onLogUsage: () -> Unit,
 ) {
     val low = item.isLow
-    val progress = item.remainingPercent.toFloat()
+    val progress by animateFloatAsState(
+        targetValue = item.remainingPercent.toFloat().coerceIn(0f, 1f),
+        animationSpec = Motion.ProgressTween,
+        label = "stockRemaining",
+    )
     val statusColor = when {
         item.isFinished -> MaterialTheme.colorScheme.outline
         low -> MaterialTheme.colorScheme.error
@@ -834,12 +840,21 @@ fun PrimaryButton(
     icon: ImageVector? = null,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = Motion.MicroSpring,
+        label = "primaryButtonPress",
+    )
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp),
+            .heightIn(min = 52.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
@@ -918,18 +933,6 @@ fun CompactExpenseRow(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
         }
         MoneyLabel(amount, style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-    }
-}
-
-@Composable
-fun QuickAddFloatingButton(onClick: () -> Unit) {
-    FloatingActionButton(
-        onClick = onClick,
-        containerColor = AccentMint,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        shape = RoundedCornerShape(20.dp),
-    ) {
-        Icon(AppIcons.Add, contentDescription = "Add")
     }
 }
 

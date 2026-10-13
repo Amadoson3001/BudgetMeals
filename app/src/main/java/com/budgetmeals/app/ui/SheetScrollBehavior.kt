@@ -15,8 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -29,12 +32,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Velocity
 import kotlin.math.abs
 
-private class SheetScrollBehavior {
+internal class SheetScrollBehavior {
     val scrollStates = mutableSetOf<ScrollState>()
     var gestureStartedAtTop = true
     var returnToTopInProgress = false
     var pointerPressed = false
     var lastReturnedToTopTimestamp = 0L
+    var lastDragDownTimestamp = 0L
+    var lastDragY = 0f
 
     fun isScrolledDown(): Boolean =
         scrollStates.any { it.value > 0 || it.canScrollBackward }
@@ -52,12 +57,22 @@ private class SheetScrollBehavior {
         gestureStartedAtTop = canStartSheetDrag()
     }
 
-    fun onAllPointersUp() {
+    fun onAllPointersUp(dragY: Float = 0f) {
         pointerPressed = false
+        val now = SystemClock.uptimeMillis()
+        if (dragY > 15f && gestureStartedAtTop) {
+            lastDragDownTimestamp = now
+            lastDragY = dragY
+        }
         if (!isScrolledDown() && scrollStates.none { it.isScrollInProgress }) {
             returnToTopInProgress = false
-            lastReturnedToTopTimestamp = SystemClock.uptimeMillis()
+            lastReturnedToTopTimestamp = now
         }
+    }
+
+    fun isRecentPhysicalDragDown(now: Long = SystemClock.uptimeMillis()): Boolean {
+        if (pointerPressed && gestureStartedAtTop) return true
+        return (lastDragDownTimestamp > 0L && (now - lastDragDownTimestamp) in 0..600L && lastDragY > 15f)
     }
 }
 
@@ -69,35 +84,44 @@ internal fun ScrollAwareModalBottomSheet(
     onDismissRequest: () -> Unit,
     sheetState: SheetState,
     modifier: Modifier = Modifier,
+    behavior: SheetScrollBehavior = remember(sheetState) { SheetScrollBehavior() },
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val behavior = remember(sheetState) { SheetScrollBehavior() }
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        modifier = modifier.pointerInput(behavior) {
-            awaitEachGesture {
-                awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                behavior.onPointerDown()
-                try {
-                    do {
-                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                    } while (event.changes.any { it.pressed })
-                } finally {
-                    behavior.onAllPointersUp()
+    // Material 3 1.3.1 keeps the platform Back callback from the dialog's creation.
+    // Replacing only SheetState leaves Back targeting the previous sheet (e.g. Quick Add).
+    // Keep the dialog, its predictive animation and its callbacks with the same state.
+    key(sheetState) {
+        ModalBottomSheet(
+            onDismissRequest = onDismissRequest,
+            sheetState = sheetState,
+            modifier = modifier.pointerInput(behavior) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    behavior.onPointerDown()
+                    var totalDragY = 0f
+                    try {
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            event.changes.firstOrNull { it.id == down.id }?.let { change ->
+                                totalDragY += change.positionChange().y
+                            }
+                        } while (event.changes.any { it.pressed })
+                    } finally {
+                        behavior.onAllPointersUp(totalDragY)
+                    }
                 }
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        dragHandle = {
-            CompositionLocalProvider(LocalSheetScrollBehavior provides behavior) {
-                BottomSheetDefaults.DragHandle(
-                    Modifier.blockSheetDragWhenScrolled().testTag("sheet_drag_handle"),
-                )
-            }
-        },
-    ) {
-        CompositionLocalProvider(LocalSheetScrollBehavior provides behavior) { content() }
+            },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            dragHandle = {
+                CompositionLocalProvider(LocalSheetScrollBehavior provides behavior) {
+                    BottomSheetDefaults.DragHandle(
+                        Modifier.blockSheetDragWhenScrolled().testTag("sheet_drag_handle"),
+                    )
+                }
+            },
+        ) {
+            CompositionLocalProvider(LocalSheetScrollBehavior provides behavior) { content() }
+        }
     }
 }
 
@@ -110,14 +134,18 @@ internal fun Modifier.sheetVerticalScroll(scrollState: ScrollState): Modifier {
         onDispose { behavior?.scrollStates?.remove(scrollState) }
     }
 
-    LaunchedEffect(behavior, scrollState.value, scrollState.isScrollInProgress) {
+    LaunchedEffect(behavior, scrollState) {
         if (behavior != null) {
-            if (scrollState.value > 0) {
-                behavior.returnToTopInProgress = true
-            } else if (!scrollState.isScrollInProgress && !behavior.pointerPressed) {
-                behavior.returnToTopInProgress = false
-                behavior.lastReturnedToTopTimestamp = SystemClock.uptimeMillis()
-            }
+            snapshotFlow { (scrollState.value > 0) to scrollState.isScrollInProgress }
+                .distinctUntilChanged()
+                .collect { (scrolled, inProgress) ->
+                    if (scrolled) {
+                        behavior.returnToTopInProgress = true
+                    } else if (!inProgress && !behavior.pointerPressed) {
+                        behavior.returnToTopInProgress = false
+                        behavior.lastReturnedToTopTimestamp = SystemClock.uptimeMillis()
+                    }
+                }
         }
     }
 

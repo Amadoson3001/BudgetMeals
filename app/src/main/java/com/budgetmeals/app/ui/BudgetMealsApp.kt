@@ -14,20 +14,33 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -38,12 +51,8 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
@@ -52,10 +61,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SheetValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlin.math.absoluteValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,9 +83,16 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetmeals.app.data.Expense
 import com.budgetmeals.app.data.FoodCatalogItem
@@ -171,7 +191,7 @@ fun BudgetMealsApp(
             coroutineScope.launch {
                 pagerState.animateScrollToPage(
                     page = tab.ordinal,
-                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    animationSpec = tween(durationMillis = Motion.NavigationMs, easing = Motion.Emphasized),
                 )
             }
         }
@@ -291,6 +311,13 @@ fun BudgetMealsApp(
         }
     }
 
+    LaunchedEffect(pagerState.currentPage) {
+        val settledTab = MainTab.entries.getOrNull(pagerState.currentPage) ?: MainTab.HOME
+        if (mainRoute != settledTab.route) {
+            mainRoute = settledTab.route
+        }
+    }
+
     BackHandler(enabled = detailRoute == null && sheet == null && (pagerState.currentPage != 0 || mainRoute != MainTab.HOME.route)) {
         openMainTab(MainTab.HOME)
     }
@@ -352,6 +379,17 @@ fun BudgetMealsApp(
     }
 
     val isMainRoute = detailRoute == null
+    val activeTab = MainTab.entries.getOrElse(
+        if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage,
+    ) { MainTab.HOME }
+    val mainFab = when (activeTab) {
+        MainTab.HOME -> FabAction("Add", AppSheet.QuickAdd)
+        MainTab.PLAN -> FabAction("New meal", AppSheet.AddTemplate)
+        MainTab.STOCK -> FabAction("Purchase", AppSheet.AddPurchase)
+        MainTab.SHOP -> FabAction("Add item", AppSheet.AddShopping)
+        MainTab.MORE -> null
+    }
+    val detailMotionDistance = with(LocalDensity.current) { 30.dp.roundToPx() }
 
     Box(
         modifier = Modifier
@@ -360,9 +398,22 @@ fun BudgetMealsApp(
             .onSizeChanged { detailContentWidth = it.width }
     ) {
         // --- BASE LAYER: Scaffold with Main Tabs & Navigation Bar ---
-        val baseScale = if (isPredictiveBackActive) (0.94f + 0.06f * predictiveBackProgress.value) else 1.0f
-        val baseCornerRadius = if (isPredictiveBackActive) ((20f * (1f - predictiveBackProgress.value)).dp) else 0.dp
-        val baseScrimAlpha = if (isPredictiveBackActive) (0.22f * (1f - predictiveBackProgress.value)) else 0.0f
+        val hasDetail = detailRoute != null
+        val animatedDetailProgress by animateFloatAsState(
+            targetValue = if (hasDetail) 1f else 0f,
+            animationSpec = if (gestureCommitted) snap() else tween(durationMillis = Motion.NavigationMs, easing = Motion.Emphasized),
+            label = "baseLayerRecede",
+        )
+        // A committed gesture has already restored the main screen. Keep that final
+        // pose while clearing the overlay instead of starting a second scale animation.
+        val baseProgress = when {
+            isPredictiveBackActive -> 1f - predictiveBackProgress.value
+            gestureCommitted -> 0f
+            else -> animatedDetailProgress
+        }
+        val baseScale = 1f - 0.06f * baseProgress
+        val baseCornerRadius = (20f * baseProgress).dp
+        val baseScrimAlpha = 0.25f * baseProgress
 
         Scaffold(
             modifier = Modifier
@@ -385,30 +436,12 @@ fun BudgetMealsApp(
                 }
             },
             floatingActionButton = {
-                AnimatedVisibility(
-                    visible = isMainRoute && !uiState.isLoading,
-                    enter = scaleIn(tween(Motion.MediumMs, easing = Motion.EmphasizedDecelerate)) + fadeIn(tween(Motion.ShortMs)),
-                    exit = scaleOut(tween(Motion.ShortMs, easing = Motion.EmphasizedAccelerate)) + fadeOut(tween(Motion.ShortMs)),
-                ) {
-                    val activeTab = MainTab.entries.getOrElse(if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) { MainTab.HOME }
-                    val fab: Pair<String, () -> Unit>? = when (activeTab) {
-                        MainTab.HOME -> "Add" to { openSheet(AppSheet.QuickAdd) }
-                        MainTab.PLAN -> "New meal" to { openSheet(AppSheet.AddTemplate) }
-                        MainTab.STOCK -> "Purchase" to { openSheet(AppSheet.AddPurchase) }
-                        MainTab.SHOP -> "Add item" to { openSheet(AppSheet.AddShopping) }
-                        else -> null
-                    }
-                    if (fab != null) {
-                        ExtendedFloatingActionButton(
-                            onClick = fab.second,
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            shape = RoundedCornerShape(20.dp),
-                            icon = { Icon(AppIcons.Add, contentDescription = null) },
-                            text = { Text(fab.first, style = MaterialTheme.typography.labelLarge) },
-                        )
-                    }
-                }
+                AnimatedActionButton(
+                    action = mainFab,
+                    visible = isMainRoute && !uiState.isLoading && sheet == null,
+                    enabled = !pagerState.isScrollInProgress,
+                    onAction = openSheet,
+                )
             },
             bottomBar = {
                 AnimatedVisibility(
@@ -416,49 +449,23 @@ fun BudgetMealsApp(
                     enter = slideInVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedDecelerate)) { it } + fadeIn(tween(Motion.ShortMs)),
                     exit = slideOutVertically(tween(Motion.MediumMs, easing = Motion.EmphasizedAccelerate)) { it } + fadeOut(tween(Motion.ShortMs)),
                 ) {
-                    NavigationBar(
-                        containerColor = cardSurfaceColor(),
-                        tonalElevation = 0.dp,
-                    ) {
-                        val activeTab = MainTab.entries.getOrElse(if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) { MainTab.HOME }
-                        MainTab.entries.forEach { tab ->
-                            val selected = activeTab == tab && detailRoute == null
-                            val badgeCount = if (tab == MainTab.SHOP) uiState.snapshot.openShoppingCount else 0
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { openMainTab(tab) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                ),
-                                icon = {
-                                    BadgedBox(
-                                        badge = {
-                                            if (badgeCount > 0) {
-                                                Badge { Text(if (badgeCount > 99) "99+" else badgeCount.toString()) }
-                                            }
-                                        },
-                                    ) {
-                                        Icon(
-                                            imageVector = tabIcon(tab, selected = selected),
-                                            modifier = Modifier.size(24.dp),
-                                            contentDescription = null,
-                                        )
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        tab.label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                                    )
-                                },
-                            )
+                    val currentTab = MainTab.entries.getOrElse(
+                        if (pagerState.isScrollInProgress) {
+                            pagerState.targetPage
+                        } else {
+                            pagerState.currentPage
                         }
-                    }
+                    ) { MainTab.HOME }
+
+                    InteractiveBottomBar(
+                        currentTab = currentTab,
+                        scrollProgress = {
+                            (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                                .coerceIn(0f, (MainTab.entries.size - 1).toFloat())
+                        },
+                        badgeCount = uiState.snapshot.openShoppingCount,
+                        onTabSelected = { openMainTab(it) },
+                    )
                 }
             },
         ) { paddingValues ->
@@ -482,15 +489,19 @@ fun BudgetMealsApp(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clipToBounds(),
-                            userScrollEnabled = false,
-                            beyondViewportPageCount = 4,
+                            userScrollEnabled = true,
+                            beyondViewportPageCount = 1,
                             key = { page -> MainTab.entries[page].route },
                         ) { page ->
                             val tab = MainTab.entries[page]
                             Surface(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .graphicsLayer { clip = true },
+                                    .graphicsLayer {
+                                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                                        alpha = 1f - 0.15f * pageOffset.coerceIn(0f, 1f)
+                                        clip = true
+                                    },
                                 color = MaterialTheme.colorScheme.background,
                             ) {
                                 when (tab) {
@@ -512,7 +523,6 @@ fun BudgetMealsApp(
 
                                     MainTab.PLAN -> PlanScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddMeal = { openSheet(AppSheet.AddTemplate) },
                                         onAssignMeal = { date, mealType, template ->
                                             openSheet(AppSheet.AssignDayMeal(date, mealType, template))
                                         },
@@ -527,7 +537,6 @@ fun BudgetMealsApp(
 
                                     MainTab.STOCK -> StockScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddItem = { openSheet(AppSheet.AddPurchase) },
                                         onEditItem = { openSheet(AppSheet.EditStock(it)) },
                                         onLogUsage = { openSheet(AppSheet.LogUsage(it)) },
                                         onClearSampleStock = viewModel::clearSampleStock,
@@ -535,7 +544,6 @@ fun BudgetMealsApp(
 
                                     MainTab.SHOP -> ShoppingScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddItem = { openSheet(AppSheet.AddShopping) },
                                         onEditItem = { openSheet(AppSheet.EditShopping(it)) },
                                         onBuyItem = { openSheet(AppSheet.BuyShopping(it)) },
                                         onToggleItem = { item ->
@@ -583,15 +591,15 @@ fun BudgetMealsApp(
             targetState = detailRoute,
             transitionSpec = {
                 if (initialState == null && targetState != null) {
-                    Motion.DetailEnterForward togetherWith Motion.DetailExitForward
+                    Motion.sharedAxisX(forward = true, distancePx = detailMotionDistance).using(null)
                 } else if (initialState != null && targetState == null) {
                     if (gestureCommitted) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
-                        Motion.DetailEnterBackward togetherWith Motion.DetailExitBackward
+                        Motion.sharedAxisX(forward = false, distancePx = detailMotionDistance).using(null)
                     }
                 } else {
-                    Motion.tabEnter(true) togetherWith Motion.tabExit(true)
+                    Motion.fadeThrough().using(null)
                 }
             },
             label = "detailOverlay",
@@ -617,44 +625,57 @@ fun BudgetMealsApp(
                         },
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    Box(
+                    Scaffold(
                         modifier = Modifier
                             .fillMaxSize()
                             .statusBarsPadding()
                             .navigationBarsPadding(),
-                    ) {
-                        saveableStateHolder.SaveableStateProvider(activeDetail) {
-                            when (activeDetail) {
-                                "items" -> FoodCatalogScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddItem = { openSheet(AppSheet.AddFoodItem) },
-                                    onEditItem = { openSheet(AppSheet.EditFoodItem(it)) },
-                                    onDeleteItem = viewModel::deleteFoodCatalogItem,
-                                    onImportJson = { importFoodJsonLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*")) },
-                                    onExportJson = { viewModel.exportFoodCatalogJson { foodJsonToShare = it } },
-                                    onCopyAiPrompt = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("BudgetMeals AI food catalog instructions", com.budgetmeals.app.data.FoodCatalogJsonCodec.prompt(context)))
-                                        viewModel.notify("AI catalog instructions copied")
-                                    },
-                                )
+                        containerColor = MaterialTheme.colorScheme.background,
+                        floatingActionButton = {
+                            val detailFab = when (activeDetail) {
+                                "items" -> FabAction("Add food", AppSheet.AddFoodItem)
+                                "expenses" -> FabAction("Add expense", AppSheet.AddExpense)
+                                "spares" -> FabAction("Add money", AppSheet.AddSpares)
+                                else -> null
+                            }
+                            AnimatedActionButton(
+                                action = detailFab,
+                                visible = detailRoute == activeDetail && sheet == null,
+                                onAction = openSheet,
+                            )
+                        },
+                    ) { detailPadding ->
+                        Box(Modifier.fillMaxSize().padding(detailPadding)) {
+                            saveableStateHolder.SaveableStateProvider(activeDetail) {
+                                when (activeDetail) {
+                                    "items" -> FoodCatalogScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onEditItem = { openSheet(AppSheet.EditFoodItem(it)) },
+                                        onDeleteItem = viewModel::deleteFoodCatalogItem,
+                                        onImportJson = { importFoodJsonLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*")) },
+                                        onExportJson = { viewModel.exportFoodCatalogJson { foodJsonToShare = it } },
+                                        onCopyAiPrompt = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("BudgetMeals AI food catalog instructions", com.budgetmeals.app.data.FoodCatalogJsonCodec.prompt(context)))
+                                            viewModel.notify("AI catalog instructions copied")
+                                        },
+                                    )
 
-                                "expenses" -> ExpensesScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddExpense = { openSheet(AppSheet.AddExpense) },
-                                    onEditExpense = { openSheet(AppSheet.EditExpense(it)) },
-                                    onDeleteExpense = viewModel::deleteExpense,
-                                    onAddCategory = { openSheet(AppSheet.AddCategory) },
-                                )
+                                    "expenses" -> ExpensesScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onEditExpense = { openSheet(AppSheet.EditExpense(it)) },
+                                        onDeleteExpense = viewModel::deleteExpense,
+                                        onAddCategory = { openSheet(AppSheet.AddCategory) },
+                                    )
 
-                                "spares" -> SparesScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddSpares = { openSheet(AppSheet.AddSpares) },
-                                    onSaveToday = viewModel::saveTodayToSpares,
-                                )
+                                    "spares" -> SparesScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onSaveToday = viewModel::saveTodayToSpares,
+                                    )
+                                }
                             }
                         }
                     }
@@ -663,17 +684,50 @@ fun BudgetMealsApp(
         }
     }
 
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val halfScreenHeightPx = remember(density, configuration) {
+        with(density) { configuration.screenHeightDp.dp.toPx() * 0.5f }
+    }
+    val dragSlopPx = remember(density) {
+        with(density) { 8.dp.toPx() }
+    }
+    var sheetContentHeightPx by remember(sheetGeneration) { mutableFloatStateOf(0f) }
+    var sheetStateRef by remember(sheetGeneration) { mutableStateOf<androidx.compose.material3.SheetState?>(null) }
     var sheetDismissGuard by remember(sheetGeneration) { mutableStateOf<(() -> Unit)?>(null) }
+    val sheetBehavior = remember(sheetGeneration) { SheetScrollBehavior() }
     val sheetState = key(sheetGeneration) {
-        rememberModalBottomSheetState(
+        val state = rememberModalBottomSheetState(
             skipPartiallyExpanded = true,
             confirmValueChange = { nextValue ->
-                if (nextValue == SheetValue.Hidden && sheetDismissGuard != null && closingSheetGeneration != sheetGeneration) {
-                    sheetDismissGuard?.invoke()
-                    false
+                if (nextValue == SheetValue.Hidden && closingSheetGeneration != sheetGeneration) {
+                    if (sheetDismissGuard != null) {
+                        sheetDismissGuard?.invoke()
+                        false
+                    } else {
+                        val currentOffset = try {
+                            sheetStateRef?.requireOffset() ?: 0f
+                        } catch (_: Exception) {
+                            0f
+                        }
+                        val isFingerDrag = sheetBehavior.isRecentPhysicalDragDown() && currentOffset > dragSlopPx
+                        if (isFingerDrag) {
+                            val dismissThreshold = if (sheetContentHeightPx > 0f) {
+                                minOf(halfScreenHeightPx, sheetContentHeightPx * 0.5f)
+                            } else {
+                                halfScreenHeightPx
+                            }
+                            currentOffset >= dismissThreshold
+                        } else {
+                            // Predictive back gesture, hardware back, scrim tap, or programmatic hide
+                            true
+                        }
+                    }
                 } else true
             },
         )
+        sheetStateRef = state
+        state
     }
     val sheetScope = rememberCoroutineScope()
     val closeSheet: () -> Unit = close@{
@@ -710,11 +764,16 @@ fun BudgetMealsApp(
                 }
             },
             sheetState = sheetState,
+            behavior = sheetBehavior,
+            modifier = Modifier.onSizeChanged { size ->
+                sheetContentHeightPx = size.height.toFloat()
+            },
         ) {
             AnimatedContent(
                 targetState = currentSheet,
                 transitionSpec = {
-                    Motion.SheetContentEnter togetherWith Motion.SheetContentExit
+                    (Motion.SheetContentEnter togetherWith Motion.SheetContentExit)
+                        .using(SizeTransform(clip = false) { _, _ -> Motion.CardExpandTween })
                 },
                 label = "sheetContentTransition",
             ) { activeSheet ->
@@ -754,4 +813,176 @@ private fun tabIcon(tab: MainTab, selected: Boolean) = when (tab) {
     MainTab.STOCK -> if (selected) AppIcons.Inventory2Filled else AppIcons.Inventory2
     MainTab.SHOP -> if (selected) AppIcons.ShoppingCartFilled else AppIcons.ShoppingCart
     MainTab.MORE -> if (selected) AppIcons.GridViewFilled else AppIcons.GridView
+}
+
+@Composable
+private fun InteractiveBottomBar(
+    currentTab: MainTab,
+    scrollProgress: () -> Float,
+    badgeCount: Int,
+    onTabSelected: (MainTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = cardSurfaceColor(),
+        tonalElevation = 2.dp,
+        border = BorderStroke(1.dp, MaterialTheme.extendedColors.cardBorder.copy(alpha = 0.5f)),
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .height(68.dp),
+        ) {
+            val tabCount = MainTab.entries.size
+            val tabWidth = maxWidth / tabCount
+            val pillWidth = 56.dp
+            val pillHeight = 32.dp
+
+            // Read progress during placement so moving the indicator doesn't recompose labels.
+            Box(
+                modifier = Modifier
+                    .offset {
+                        val position = scrollProgress().coerceIn(0f, (tabCount - 1).toFloat())
+                        IntOffset(
+                            x = (tabWidth.toPx() * position + (tabWidth - pillWidth).toPx() / 2).roundToInt(),
+                            y = 6.dp.roundToPx(),
+                        )
+                    }
+                    .size(width = pillWidth, height = pillHeight)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                    ),
+            )
+
+            // Tabs row
+            Row(
+                modifier = Modifier.fillMaxSize().selectableGroup(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MainTab.entries.forEach { tab ->
+                    val selected = currentTab == tab
+                    val badge = if (tab == MainTab.SHOP) badgeCount else 0
+                    InteractiveTabItem(
+                        tab = tab,
+                        selected = selected,
+                        badgeCount = badge,
+                        onClick = { onTabSelected(tab) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InteractiveTabItem(
+    tab: MainTab,
+    selected: Boolean,
+    badgeCount: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = when {
+            isPressed -> 0.94f
+            selected -> 1.04f
+            else -> 1.0f
+        },
+        animationSpec = Motion.MicroSpring,
+        label = "tabItemScale",
+    )
+
+    val iconTint by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = Motion.ColorTween,
+        label = "tabItemIconTint",
+    )
+
+    val labelColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+        },
+        animationSpec = Motion.ColorTween,
+        label = "tabItemLabelColor",
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+            ),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            BadgedBox(
+                badge = {
+                    if (badgeCount > 0) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ) {
+                            Text(
+                                if (badgeCount > 99) "99+" else badgeCount.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                },
+            ) {
+                Crossfade(
+                    targetState = selected,
+                    animationSpec = Motion.FadeTween,
+                    label = "tabIconCrossfade",
+                ) { isSel ->
+                    Icon(
+                        imageVector = tabIcon(tab, selected = isSel),
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(3.dp))
+
+        Text(
+            text = tab.label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = labelColor,
+            maxLines = 1,
+        )
+    }
 }

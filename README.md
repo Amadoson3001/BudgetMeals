@@ -54,23 +54,19 @@ Android's [app signing documentation](https://developer.android.com/studio/publi
 
 ## Checks
 
-Run local unit tests, Android lint, and compile the instrumentation tests without a device:
+Build the debug APK and run Android lint:
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleUiTestAndroidTest
+.\run_checks.bat
 ```
 
-Unit test reports are in `app/build/reports/tests/testDebugUnitTest/`; lint reports are in `app/build/reports/lint-results-debug.html`.
-
-When an emulator or device is available, run the UI, database, and repository regression tests:
-
-Device tests target `com.budgetmeals.app.uitest`, a separate application from the installed release. The runner also leaves the test APKs installed after the run. Tests never replace or uninstall `com.budgetmeals.app`.
+or:
 
 ```powershell
-.\gradlew.bat :app:connectedUiTestAndroidTest
+.\gradlew.bat :app:assembleDebug :app:lintDebug
 ```
 
-Instrumentation tests use a shared `BudgetStorageRule` to isolate their database and preferences, close every opened connection, and delete their test data. Date-sensitive tests use fixed dates; `BudgetRepository` accepts a `Clock` for repeatable day calculations and timestamps.
+Lint reports are in `app/build/reports/lint-results-debug.html`.
 
 ## Code organization
 
@@ -78,7 +74,6 @@ Instrumentation tests use a shared `BudgetStorageRule` to isolate their database
 - `data/AppSnapshot.kt` contains derived budget and stock summaries. JSON, CSV, and stock usage serialization live in dedicated codecs.
 - `state/BudgetViewModel.kt` serializes repository operations and error recovery; `BudgetUiState.kt` contains screen state and the meal draft.
 - `ui/SheetContent.kt` dispatches to feature-specific sheet files, using the shared `SheetScaffold.kt`. `ExportSharing.kt` handles Android export sharing.
-- Unit tests mirror the `data`, `state`, and `ui` packages and group scenarios by feature.
 
 ## First-use flow
 

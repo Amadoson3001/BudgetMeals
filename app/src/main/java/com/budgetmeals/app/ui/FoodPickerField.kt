@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.DropdownMenu
@@ -38,11 +39,17 @@ internal fun FoodPickerField(
 ) {
     var expanded by remember(component.id) { mutableStateOf(false) }
     val normalizedQuery = query.trim().lowercase()
-    val matches = catalogItems
-        .filter { normalizedQuery.isBlank() || it.name.lowercase().contains(normalizedQuery) }
-        .sortedBy { it.name.lowercase() }
-    val exactMatch = catalogItems.any { it.name.equals(query.trim(), ignoreCase = true) }
-    val selectedCatalog = catalogItems.firstOrNull { it.id == component.catalogId }
+    val matches = remember(catalogItems, normalizedQuery) {
+        catalogItems
+            .filter { normalizedQuery.isBlank() || it.name.lowercase().contains(normalizedQuery) }
+            .sortedBy { it.name.lowercase() }
+    }
+    val exactMatch = remember(catalogItems, query) {
+        catalogItems.any { it.name.equals(query.trim(), ignoreCase = true) }
+    }
+    val selectedCatalog = remember(catalogItems, component.catalogId) {
+        catalogItems.firstOrNull { it.id == component.catalogId }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         BudgetTextField(
@@ -93,7 +100,7 @@ internal fun FoodPickerField(
 
             if (selectedCatalog != null) {
                 Text(
-                    "${selectedCatalog.portionUnit} Â· ${BudgetMath.money(BudgetMath.catalogCostPerPortion(snapshot, selectedCatalog), 2)}",
+                    "${selectedCatalog.portionUnit} · ${BudgetMath.money(BudgetMath.catalogCostPerPortion(snapshot, selectedCatalog), 2)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = AccentMintLight,
                 )
@@ -103,15 +110,20 @@ internal fun FoodPickerField(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DarkSurface),
+            modifier = Modifier
+                .background(DarkSurface)
+                .heightIn(max = 280.dp),
         ) {
-            matches.forEach { food ->
+            matches.take(10).forEach { food ->
+                val costPerPortion = remember(snapshot, food.id) {
+                    BudgetMath.catalogCostPerPortion(snapshot, food)
+                }
                 DropdownMenuItem(
                     text = {
                         Column {
                             Text(food.name, color = TextPrimary, fontWeight = FontWeight.Medium)
                             Text(
-                                "${food.category.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} Â· ${food.conversionLabel} Â· ${BudgetMath.money(BudgetMath.catalogCostPerPortion(snapshot, food), 2)} / ${food.portionUnit}",
+                                "${food.category.name.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() }} · ${food.conversionLabel} · ${BudgetMath.money(costPerPortion, 2)} / ${food.portionUnit}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextSecondary,
                             )
@@ -122,6 +134,19 @@ internal fun FoodPickerField(
                         onSelected(food)
                         expanded = false
                     },
+                )
+            }
+            if (matches.size > 10) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "Showing 10 of ${matches.size} items — type to filter",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted,
+                        )
+                    },
+                    onClick = {},
+                    enabled = false,
                 )
             }
             if (query.isNotBlank() && !exactMatch) {

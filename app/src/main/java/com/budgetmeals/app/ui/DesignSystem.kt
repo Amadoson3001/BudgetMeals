@@ -1,6 +1,10 @@
 package com.budgetmeals.app.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +23,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.budgetmeals.app.ui.icons.AppIcons
 import com.budgetmeals.app.ui.theme.Spacing
+import com.budgetmeals.app.ui.theme.Motion
 import com.budgetmeals.app.ui.theme.extendedColors
 
 // ============================================================================
@@ -60,24 +68,34 @@ fun SoftCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(20.dp)
+    val animatedContainer by animateColorAsState(containerColor, Motion.ColorTween, label = "cardContainer")
+    val animatedBorder by animateColorAsState(borderColor, Motion.ColorTween, label = "cardBorder")
     val inner: @Composable () -> Unit = {
         Column(Modifier.padding(contentPadding), content = content)
     }
     if (onClick != null) {
+        val interactionSource = remember { MutableInteractionSource() }
+        val pressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(
+            if (pressed) 0.99f else 1f,
+            Motion.MicroSpring,
+            label = "cardPress",
+        )
         Surface(
             onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale },
             shape = shape,
-            color = containerColor,
-            border = BorderStroke(1.dp, borderColor),
+            color = animatedContainer,
+            border = BorderStroke(1.dp, animatedBorder),
+            interactionSource = interactionSource,
             content = inner,
         )
     } else {
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = shape,
-            color = containerColor,
-            border = BorderStroke(1.dp, borderColor),
+            color = animatedContainer,
+            border = BorderStroke(1.dp, animatedBorder),
             content = inner,
         )
     }

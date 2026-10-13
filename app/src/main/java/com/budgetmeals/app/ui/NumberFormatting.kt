@@ -23,6 +23,18 @@ internal fun numberInput(raw: String, decimal: Boolean): String? {
     } else filtered
 }
 
+internal fun percentInput(raw: String): String? {
+    val sanitized = numberInput(raw, decimal = false) ?: return null
+    if (sanitized.isEmpty()) return ""
+    val parsed = sanitized.toIntOrNull() ?: return null
+    return parsed.coerceIn(0, 100).toString()
+}
+
+internal fun String?.parsePercent(default: Int = 25): Int {
+    if (this.isNullOrBlank()) return default
+    return trim().normalizeNumber().toIntOrNull()?.coerceIn(0, 100) ?: default
+}
+
 fun Double.cleanNumber(): String = when {
     this % 1.0 == 0.0 -> String.format(Locale.US, "%.0f", this)
     this < 0.1 && this > 0.0 -> String.format(Locale.US, "%.3f", this).trimEnd('0').trimEnd('.')

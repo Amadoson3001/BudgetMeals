@@ -2,6 +2,7 @@
 
 package com.budgetmeals.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -183,6 +184,9 @@ internal fun TemplateFormSheet(
         onDispose { latestGuardChanged(null) }
     }
     SideEffect { onDismissGuardChanged(if (hasUnsavedChanges || isSaving || isDeleting) stableGuard else null) }
+    BackHandler(enabled = hasUnsavedChanges || isSaving || isDeleting) {
+        requestDismiss()
+    }
 
     fun addCatalogFood(food: FoodCatalogItem) {
         val found = components.indexOfFirst { it.catalogId == food.id }

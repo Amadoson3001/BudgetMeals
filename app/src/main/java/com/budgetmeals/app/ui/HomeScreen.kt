@@ -1,7 +1,7 @@
-﻿package com.budgetmeals.app.ui
+package com.budgetmeals.app.ui
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -451,7 +451,7 @@ private fun MealRow(
         borderColor = borderColor,
         contentPadding = Spacing.md,
     ) {
-        Column(Modifier.animateContentSize(Motion.CardExpandTween)) {
+        Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconBadge(
                     icon = mealIconVector(mealType),
@@ -523,89 +523,95 @@ private fun MealRow(
                 }
             }
 
-            if (expanded) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = Spacing.md),
-                    color = MaterialTheme.extendedColors.cardBorder,
-                )
-                if (components.isEmpty() && foodsText.isBlank()) {
-                    Text(
-                        text = "No foods added yet.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            AnimatedVisibility(
+                visible = expanded,
+                enter = Motion.ExpandEnter,
+                exit = Motion.ExpandExit,
+            ) {
+                Column {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = Spacing.md),
+                        color = MaterialTheme.extendedColors.cardBorder,
                     )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                    components.forEach { comp ->
-                        val shortage = shortagesByName[comp.name.lowercase(Locale.US)]
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(8.dp)
-                                    .padding(0.dp)
-                                    .semantics { contentDescription = if (shortage != null) "Low stock" else "In stock" }
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(8.dp),
-                                    shape = CircleShape,
-                                    color = if (shortage != null) MaterialTheme.colorScheme.error else accent,
-                                ) {}
-                            }
-                            Spacer(Modifier.width(Spacing.md))
-                            Text(
-                                text = comp.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = formatComponentQuantity(comp.quantity, comp.unit),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (shortage != null) {
-                                val stockItem = shortage.third
-                                if (stockItem != null) {
-                                    TextButton(
-                                        onClick = { onQuickShop(stockItem) },
-                                        contentPadding = PaddingValues(horizontal = Spacing.sm),
-                                        modifier = Modifier.heightIn(min = 48.dp),
-                                    ) { Text("Add to list") }
-                                }
-                            } else if (comp.estimatedCost > 0.0) {
-                                Text(
-                                    text = BudgetMath.money(comp.estimatedCost),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = Spacing.md),
-                                )
-                            }
-                        }
-                    }
-                    if (components.isEmpty() && foodsText.isNotBlank()) {
+                    if (components.isEmpty() && foodsText.isBlank()) {
                         Text(
-                            text = foodsText,
+                            text = "No foods added yet.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                }
-                TextButton(
-                    onClick = onEdit,
-                    modifier = Modifier.padding(top = Spacing.xs),
-                    contentPadding = PaddingValues(horizontal = 0.dp),
-                ) {
-                    Icon(AppIcons.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(Spacing.sm))
-                    Text(
-                        when {
-                            log != null -> "Edit result"
-                            isPlanned -> "Change meal"
-                            else -> "Choose a meal"
-                        },
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        components.forEach { comp ->
+                            val shortage = shortagesByName[comp.name.lowercase(Locale.US)]
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier
+                                        .size(8.dp)
+                                        .padding(0.dp)
+                                        .semantics { contentDescription = if (shortage != null) "Low stock" else "In stock" }
+                                ) {
+                                    Surface(
+                                        modifier = Modifier.size(8.dp),
+                                        shape = CircleShape,
+                                        color = if (shortage != null) MaterialTheme.colorScheme.error else accent,
+                                    ) {}
+                                }
+                                Spacer(Modifier.width(Spacing.md))
+                                Text(
+                                    text = comp.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = formatComponentQuantity(comp.quantity, comp.unit),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (shortage != null) {
+                                    val stockItem = shortage.third
+                                    if (stockItem != null) {
+                                        TextButton(
+                                            onClick = { onQuickShop(stockItem) },
+                                            contentPadding = PaddingValues(horizontal = Spacing.sm),
+                                            modifier = Modifier.heightIn(min = 48.dp),
+                                        ) { Text("Add to list") }
+                                    }
+                                } else if (comp.estimatedCost > 0.0) {
+                                    Text(
+                                        text = BudgetMath.money(comp.estimatedCost),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(start = Spacing.md),
+                                    )
+                                }
+                            }
+                        }
+                        if (components.isEmpty() && foodsText.isNotBlank()) {
+                            Text(
+                                text = foodsText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                    TextButton(
+                        onClick = onEdit,
+                        modifier = Modifier.padding(top = Spacing.xs),
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                    ) {
+                        Icon(AppIcons.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(Spacing.sm))
+                        Text(
+                            when {
+                                log != null -> "Edit result"
+                                isPlanned -> "Change meal"
+                                else -> "Choose a meal"
+                            },
+                        )
+                    }
                 }
             }
         }

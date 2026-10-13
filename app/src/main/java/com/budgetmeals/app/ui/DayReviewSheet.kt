@@ -95,9 +95,9 @@ internal fun DayReviewSheet(
         plan.mapValues { (mealType, template) ->
             val log = logs[mealType]
             if (log == null || template.cost <= 0.001) {
-                25
+                "25"
             } else {
-                ((log.leftoverCost / template.cost) * 100.0).roundToInt().coerceIn(1, 99)
+                ((log.leftoverCost / template.cost) * 100.0).roundToInt().coerceIn(0, 100).toString()
             }
         }
     }
@@ -114,13 +114,17 @@ internal fun DayReviewSheet(
     val consumedTotal = plan.entries.sumOf { (mealType, template) ->
         when (choices[mealType]) {
             MealReviewChoice.FULL -> template.cost
-            MealReviewChoice.LEFTOVERS -> template.cost * (1.0 - leftoverPercent[mealType].orZeroPercent() / 100.0)
+            MealReviewChoice.LEFTOVERS -> {
+                val percent = leftoverPercent[mealType].parsePercent()
+                template.cost * (1.0 - percent / 100.0)
+            }
             MealReviewChoice.SKIPPED, MealReviewChoice.UNRECORDED, null -> 0.0
         }
     }
     val leftoverTotal = plan.entries.sumOf { (mealType, template) ->
         if (choices[mealType] == MealReviewChoice.LEFTOVERS) {
-            template.cost * (leftoverPercent[mealType].orZeroPercent() / 100.0)
+            val percent = leftoverPercent[mealType].parsePercent()
+            template.cost * (percent / 100.0)
         } else {
             0.0
         }
@@ -197,7 +201,7 @@ internal fun DayReviewSheet(
 
         plan.forEach { (mealType, template) ->
             val choice = choices[mealType] ?: MealReviewChoice.UNRECORDED
-            val percent = leftoverPercent[mealType] ?: 25
+            val percent = leftoverPercent[mealType].parsePercent()
             val consumed = when (choice) {
                 MealReviewChoice.FULL -> template.cost
                 MealReviewChoice.LEFTOVERS -> template.cost * (1.0 - percent / 100.0)
@@ -272,7 +276,12 @@ internal fun DayReviewSheet(
                             label = "Left some",
                             selected = choice == MealReviewChoice.LEFTOVERS,
                             selectedColor = AccentAmber,
-                            onClick = { choices = choices + (mealType to MealReviewChoice.LEFTOVERS) },
+                            onClick = {
+                                choices = choices + (mealType to MealReviewChoice.LEFTOVERS)
+                                if (leftoverPercent[mealType].isNullOrBlank()) {
+                                    leftoverPercent = leftoverPercent + (mealType to "25")
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                         )
                         ReviewChoiceButton(
@@ -292,12 +301,14 @@ internal fun DayReviewSheet(
                     }
                     if (choice == MealReviewChoice.LEFTOVERS) {
                         NumberField(
-                            value = percent.toString(),
+                            value = leftoverPercent[mealType].orEmpty(),
                             onValueChange = { raw ->
-                                val parsed = raw.toIntOrNull() ?: return@NumberField
-                                leftoverPercent = leftoverPercent + (mealType to parsed.coerceIn(1, 99))
+                                percentInput(raw)?.let { sanitized ->
+                                    leftoverPercent = leftoverPercent + (mealType to sanitized)
+                                }
                             },
                             label = "Percent left over",
+                            placeholder = "25",
                             prefix = "% ",
                             decimal = false,
                         )
@@ -361,7 +372,7 @@ internal fun DayReviewSheet(
             onClick = {
                 val entries = plan.map { (mealType, template) ->
                     val choice = choices[mealType] ?: MealReviewChoice.UNRECORDED
-                    val percent = leftoverPercent[mealType] ?: 25
+                    val percent = leftoverPercent[mealType].parsePercent()
                     val consumed = when (choice) {
                         MealReviewChoice.FULL -> template.cost
                         MealReviewChoice.LEFTOVERS -> template.cost * (1.0 - percent / 100.0)
@@ -409,5 +420,3 @@ private fun ReviewChoiceButton(
         Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
     }
 }
-
-private fun Int?.orZeroPercent(): Int = this ?: 0
