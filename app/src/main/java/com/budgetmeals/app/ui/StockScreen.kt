@@ -49,12 +49,12 @@ import com.budgetmeals.app.data.DatabaseMigrations
 import com.budgetmeals.app.data.StockItem
 import com.budgetmeals.app.state.BudgetMath
 import com.budgetmeals.app.ui.theme.extendedColors
+import com.budgetmeals.app.ui.theme.Motion
 import java.time.LocalDate
 
 @Composable
 fun StockScreen(
     snapshot: AppSnapshot,
-    onAddItem: () -> Unit,
     onEditItem: (StockItem) -> Unit,
     onLogUsage: (StockItem) -> Unit,
     onLogUsageWithDate: ((StockItem, Double, LocalDate) -> Unit)? = null,
@@ -219,15 +219,20 @@ fun StockScreen(
             item(key = "empty") {
                 EmptyState(
                     title = if (filter == "Low") "All stocked up" else "Your stock list is empty",
-                    message = if (filter == "Low") "None of your pantry items are running low right now." else "Add bulk staples like eggs, rice or coffee to track their daily cost.",
+                    message = if (filter == "Low") "None of your pantry items are running low right now." else "Tap Purchase to add bulk staples like eggs, rice or coffee and track their daily cost.",
                     icon = if (filter == "Low") AppIcons.Check else AppIcons.Inventory2,
-                    actionLabel = if (filter == "Low") "View all items" else "Add a batch",
-                    onAction = if (filter == "Low") { { filter = "All" } } else onAddItem,
+                    actionLabel = if (filter == "Low") "View all items" else null,
+                    onAction = if (filter == "Low") { { filter = "All" } } else null,
                 )
             }
         } else {
             items(visible, key = { it.id }, contentType = { "stock_progress_row" }) { item ->
                 StockProgressRow(
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     item = item,
                     catalogLabel = snapshot.foodCatalogById[item.catalogId]?.conversionLabel,
                     onClick = { onEditItem(item) },

@@ -1,8 +1,7 @@
 package com.budgetmeals.app.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -55,13 +54,13 @@ import com.budgetmeals.app.state.BudgetMath
 import com.budgetmeals.app.state.buildMealPlanWindow
 import com.budgetmeals.app.ui.icons.AppIcons
 import com.budgetmeals.app.ui.theme.Spacing
+import com.budgetmeals.app.ui.theme.Motion
 import com.budgetmeals.app.ui.theme.extendedColors
 import java.time.LocalDate
 
 @Composable
 fun PlanScreen(
     snapshot: AppSnapshot,
-    onAddMeal: () -> Unit,
     onAssignMeal: (LocalDate, MealType, MealTemplate?) -> Unit,
     onRemoveMeal: (LocalDate, MealType) -> Unit,
     onEditTemplate: (MealTemplate) -> Unit,
@@ -100,9 +99,6 @@ fun PlanScreen(
     val weeklyTotal = remember(plan) { plan.sumOf { day -> day.meals.values.sumOf { it.cost } } }
 
     val selectedDate = selectedDateEpoch?.let { LocalDate.ofEpochDay(it) }
-    val selectedDay = remember(plan, selectedDate) {
-        selectedDate?.let { date -> plan.firstOrNull { it.date == date } }
-    }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -235,47 +231,56 @@ fun PlanScreen(
 
         // 5. Selected Day Breakdown or Guide prompt
         item(key = "selected_day_content") {
-            if (selectedDay == null || selectedDate == null) {
-                SoftCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = Spacing.xl,
-                ) {
-                    Column(
+            AnimatedContent(
+                targetState = selectedDate,
+                transitionSpec = {
+                    Motion.fadeThrough().using(SizeTransform { _, _ -> Motion.CardExpandTween })
+                },
+                label = "planDayDetails",
+            ) { activeDate ->
+                val activeDay = plan.firstOrNull { it.date == activeDate }
+                if (activeDay == null || activeDate == null) {
+                    SoftCard(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        contentPadding = Spacing.xl,
                     ) {
-                        IconBadge(
-                            icon = AppIcons.CalendarMonth,
-                            tint = MaterialTheme.colorScheme.primary,
-                            size = 48.dp,
-                            iconSize = 24.dp,
-                        )
-                        Spacer(Modifier.height(Spacing.xs))
-                        Text(
-                            text = "Select a day to view or edit meals",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                        )
-                        Text(
-                            text = "Tap any day card above to assign meals, check ingredients, or change recipes.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        ) {
+                            IconBadge(
+                                icon = AppIcons.CalendarMonth,
+                                tint = MaterialTheme.colorScheme.primary,
+                                size = 48.dp,
+                                iconSize = 24.dp,
+                            )
+                            Spacer(Modifier.height(Spacing.xs))
+                            Text(
+                                text = "Select a day to view or edit meals",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                            )
+                            Text(
+                                text = "Tap any day card above to assign meals, check ingredients, or change recipes.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
+                } else {
+                    DayDetailCard(
+                        snapshot = snapshot,
+                        date = activeDate,
+                        dayPlan = activeDay,
+                        isToday = activeDate == today,
+                        onClose = { selectedDateEpoch = null },
+                        onAssignMeal = { mealType, template -> onAssignMeal(activeDate, mealType, template) },
+                        onRemoveMeal = { mealType -> onRemoveMeal(activeDate, mealType) },
+                    )
                 }
-            } else {
-                DayDetailCard(
-                    snapshot = snapshot,
-                    date = selectedDate,
-                    dayPlan = selectedDay,
-                    isToday = selectedDate == today,
-                    onClose = { selectedDateEpoch = null },
-                    onAssignMeal = { mealType, template -> onAssignMeal(selectedDate, mealType, template) },
-                    onRemoveMeal = { mealType -> onRemoveMeal(selectedDate, mealType) },
-                )
             }
         }
 
@@ -283,13 +288,6 @@ fun PlanScreen(
         item(key = "templates_header") {
             SectionTitle(
                 title = "Meal shortcuts",
-                trailing = {
-                    TextButton(onClick = onAddMeal) {
-                        Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(Spacing.xs))
-                        Text("Add")
-                    }
-                },
             )
         }
 
@@ -321,6 +319,11 @@ fun PlanScreen(
         } else {
             items(snapshot.templates, key = { it.id }, contentType = { "template_row" }) { template ->
                 MealTemplateRow(
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     snapshot = snapshot,
                     template = template,
                     onEdit = { onEditTemplate(template) },
@@ -837,6 +840,7 @@ private fun MealTemplateRow(
     template: MealTemplate,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val mealColor = when (template.mealType) {
         MealType.BREAKFAST -> AccentAmber
@@ -845,7 +849,7 @@ private fun MealTemplateRow(
         MealType.SNACK -> AccentPurple
     }
 
-    SoftCard(contentPadding = Spacing.md) {
+    SoftCard(modifier = modifier, contentPadding = Spacing.md) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

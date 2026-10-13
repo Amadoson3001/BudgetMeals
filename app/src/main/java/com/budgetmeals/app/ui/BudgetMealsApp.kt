@@ -14,25 +14,19 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +51,6 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -93,6 +86,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -193,7 +189,7 @@ fun BudgetMealsApp(
             coroutineScope.launch {
                 pagerState.animateScrollToPage(
                     page = tab.ordinal,
-                    animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                    animationSpec = tween(durationMillis = Motion.NavigationMs, easing = Motion.Emphasized),
                 )
             }
         }
@@ -381,6 +377,17 @@ fun BudgetMealsApp(
     }
 
     val isMainRoute = detailRoute == null
+    val activeTab = MainTab.entries.getOrElse(
+        if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage,
+    ) { MainTab.HOME }
+    val mainFab = when (activeTab) {
+        MainTab.HOME -> FabAction("Add", AppSheet.QuickAdd)
+        MainTab.PLAN -> FabAction("New meal", AppSheet.AddTemplate)
+        MainTab.STOCK -> FabAction("Purchase", AppSheet.AddPurchase)
+        MainTab.SHOP -> FabAction("Add item", AppSheet.AddShopping)
+        MainTab.MORE -> null
+    }
+    val detailMotionDistance = with(LocalDensity.current) { 30.dp.roundToPx() }
 
     Box(
         modifier = Modifier
@@ -392,24 +399,19 @@ fun BudgetMealsApp(
         val hasDetail = detailRoute != null
         val animatedDetailProgress by animateFloatAsState(
             targetValue = if (hasDetail) 1f else 0f,
-            animationSpec = tween(durationMillis = 280, easing = Motion.EmphasizedDecelerate),
+            animationSpec = if (gestureCommitted) snap() else tween(durationMillis = Motion.NavigationMs, easing = Motion.Emphasized),
             label = "baseLayerRecede",
         )
-        val baseScale = if (isPredictiveBackActive) {
-            0.94f + 0.06f * predictiveBackProgress.value
-        } else {
-            1.0f - (0.06f * animatedDetailProgress)
+        // A committed gesture has already restored the main screen. Keep that final
+        // pose while clearing the overlay instead of starting a second scale animation.
+        val baseProgress = when {
+            isPredictiveBackActive -> 1f - predictiveBackProgress.value
+            gestureCommitted -> 0f
+            else -> animatedDetailProgress
         }
-        val baseCornerRadius = if (isPredictiveBackActive) {
-            (20f * (1f - predictiveBackProgress.value)).dp
-        } else {
-            (20f * animatedDetailProgress).dp
-        }
-        val baseScrimAlpha = if (isPredictiveBackActive) {
-            0.25f * (1f - predictiveBackProgress.value)
-        } else {
-            0.25f * animatedDetailProgress
-        }
+        val baseScale = 1f - 0.06f * baseProgress
+        val baseCornerRadius = (20f * baseProgress).dp
+        val baseScrimAlpha = 0.25f * baseProgress
 
         Scaffold(
             modifier = Modifier
@@ -432,41 +434,13 @@ fun BudgetMealsApp(
                 }
             },
             floatingActionButton = {
-                AnimatedVisibility(
-                    visible = isMainRoute && !uiState.isLoading,
-                    enter = scaleIn(tween(Motion.MediumMs, easing = Motion.EmphasizedDecelerate)) + fadeIn(tween(Motion.ShortMs)),
-                    exit = scaleOut(tween(Motion.ShortMs, easing = Motion.EmphasizedAccelerate)) + fadeOut(tween(Motion.ShortMs)),
-                ) {
-                    val activeTab = MainTab.entries.getOrElse(if (pagerState.isScrollInProgress) pagerState.targetPage else pagerState.currentPage) { MainTab.HOME }
-                    val fab: Pair<String, () -> Unit>? = when (activeTab) {
-                        MainTab.HOME -> "Add" to { openSheet(AppSheet.QuickAdd) }
-                        MainTab.PLAN -> "New meal" to { openSheet(AppSheet.AddTemplate) }
-                        MainTab.STOCK -> "Purchase" to { openSheet(AppSheet.AddPurchase) }
-                        MainTab.SHOP -> "Add item" to { openSheet(AppSheet.AddShopping) }
-                        else -> null
-                    }
-                    if (fab != null) {
-                        ExtendedFloatingActionButton(
-                            onClick = fab.second,
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            shape = RoundedCornerShape(20.dp),
-                            icon = { Icon(AppIcons.Add, contentDescription = null) },
-                            text = {
-                                AnimatedContent(
-                                    targetState = fab.first,
-                                    transitionSpec = {
-                                        (slideInVertically(tween(180, easing = Motion.EmphasizedDecelerate)) { it / 2 } + fadeIn(tween(140)))
-                                            .togetherWith(slideOutVertically(tween(180, easing = Motion.EmphasizedAccelerate)) { -it / 2 } + fadeOut(tween(140)))
-                                    },
-                                    label = "fabTextTransition",
-                                ) { labelText ->
-                                    Text(labelText, style = MaterialTheme.typography.labelLarge)
-                                }
-                            },
-                        )
-                    }
-                }
+                AnimatedActionButton(
+                    action = mainFab,
+                    visible = isMainRoute && !uiState.isLoading && sheet == null,
+                    expanded = !pagerState.isScrollInProgress,
+                    enabled = !pagerState.isScrollInProgress,
+                    onAction = openSheet,
+                )
             },
             bottomBar = {
                 AnimatedVisibility(
@@ -513,19 +487,16 @@ fun BudgetMealsApp(
                                 .fillMaxSize()
                                 .clipToBounds(),
                             userScrollEnabled = true,
-                            beyondViewportPageCount = 4,
+                            beyondViewportPageCount = 1,
                             key = { page -> MainTab.entries[page].route },
                         ) { page ->
                             val tab = MainTab.entries[page]
                             val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-                            val pageScale = (1f - 0.05f * pageOffset.coerceIn(0f, 1f))
-                            val pageAlpha = (1f - 0.35f * pageOffset.coerceIn(0f, 1f))
+                            val pageAlpha = (1f - 0.15f * pageOffset.coerceIn(0f, 1f))
                             Surface(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .graphicsLayer {
-                                        scaleX = pageScale
-                                        scaleY = pageScale
                                         alpha = pageAlpha
                                         clip = true
                                     },
@@ -550,7 +521,6 @@ fun BudgetMealsApp(
 
                                     MainTab.PLAN -> PlanScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddMeal = { openSheet(AppSheet.AddTemplate) },
                                         onAssignMeal = { date, mealType, template ->
                                             openSheet(AppSheet.AssignDayMeal(date, mealType, template))
                                         },
@@ -565,7 +535,6 @@ fun BudgetMealsApp(
 
                                     MainTab.STOCK -> StockScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddItem = { openSheet(AppSheet.AddPurchase) },
                                         onEditItem = { openSheet(AppSheet.EditStock(it)) },
                                         onLogUsage = { openSheet(AppSheet.LogUsage(it)) },
                                         onClearSampleStock = viewModel::clearSampleStock,
@@ -573,7 +542,6 @@ fun BudgetMealsApp(
 
                                     MainTab.SHOP -> ShoppingScreen(
                                         snapshot = uiState.snapshot,
-                                        onAddItem = { openSheet(AppSheet.AddShopping) },
                                         onEditItem = { openSheet(AppSheet.EditShopping(it)) },
                                         onBuyItem = { openSheet(AppSheet.BuyShopping(it)) },
                                         onToggleItem = { item ->
@@ -621,28 +589,15 @@ fun BudgetMealsApp(
             targetState = detailRoute,
             transitionSpec = {
                 if (initialState == null && targetState != null) {
-                    (slideInHorizontally(tween(320, easing = Motion.EmphasizedDecelerate)) { (it * 0.9f).toInt() } +
-                        fadeIn(tween(240)) +
-                        scaleIn(tween(320, easing = Motion.EmphasizedDecelerate), initialScale = 0.94f))
-                        .togetherWith(
-                            fadeOut(tween(180, easing = Motion.EmphasizedAccelerate)) +
-                                scaleOut(tween(260), targetScale = 0.96f)
-                        )
+                    Motion.sharedAxisX(forward = true, distancePx = detailMotionDistance).using(null)
                 } else if (initialState != null && targetState == null) {
                     if (gestureCommitted) {
                         EnterTransition.None togetherWith ExitTransition.None
                     } else {
-                        (fadeIn(tween(220, easing = Motion.EmphasizedDecelerate)) +
-                            scaleIn(tween(260, easing = Motion.EmphasizedDecelerate), initialScale = 0.96f))
-                            .togetherWith(
-                                slideOutHorizontally(tween(280, easing = Motion.EmphasizedAccelerate)) { it } +
-                                    fadeOut(tween(200)) +
-                                    scaleOut(tween(280), targetScale = 0.94f)
-                            )
+                        Motion.sharedAxisX(forward = false, distancePx = detailMotionDistance).using(null)
                     }
                 } else {
-                    (slideInHorizontally(tween(260, easing = Motion.EmphasizedDecelerate)) { it } + fadeIn(tween(200)))
-                        .togetherWith(slideOutHorizontally(tween(260, easing = Motion.EmphasizedAccelerate)) { -it } + fadeOut(tween(200)))
+                    Motion.fadeThrough().using(null)
                 }
             },
             label = "detailOverlay",
@@ -668,44 +623,57 @@ fun BudgetMealsApp(
                         },
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    Box(
+                    Scaffold(
                         modifier = Modifier
                             .fillMaxSize()
                             .statusBarsPadding()
                             .navigationBarsPadding(),
-                    ) {
-                        saveableStateHolder.SaveableStateProvider(activeDetail) {
-                            when (activeDetail) {
-                                "items" -> FoodCatalogScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddItem = { openSheet(AppSheet.AddFoodItem) },
-                                    onEditItem = { openSheet(AppSheet.EditFoodItem(it)) },
-                                    onDeleteItem = viewModel::deleteFoodCatalogItem,
-                                    onImportJson = { importFoodJsonLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*")) },
-                                    onExportJson = { viewModel.exportFoodCatalogJson { foodJsonToShare = it } },
-                                    onCopyAiPrompt = {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        clipboard.setPrimaryClip(ClipData.newPlainText("BudgetMeals AI food catalog instructions", com.budgetmeals.app.data.FoodCatalogJsonCodec.prompt(context)))
-                                        viewModel.notify("AI catalog instructions copied")
-                                    },
-                                )
+                        containerColor = MaterialTheme.colorScheme.background,
+                        floatingActionButton = {
+                            val detailFab = when (activeDetail) {
+                                "items" -> FabAction("Add food", AppSheet.AddFoodItem)
+                                "expenses" -> FabAction("Add expense", AppSheet.AddExpense)
+                                "spares" -> FabAction("Add money", AppSheet.AddSpares)
+                                else -> null
+                            }
+                            AnimatedActionButton(
+                                action = detailFab,
+                                visible = detailRoute == activeDetail && sheet == null,
+                                onAction = openSheet,
+                            )
+                        },
+                    ) { detailPadding ->
+                        Box(Modifier.fillMaxSize().padding(detailPadding)) {
+                            saveableStateHolder.SaveableStateProvider(activeDetail) {
+                                when (activeDetail) {
+                                    "items" -> FoodCatalogScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onEditItem = { openSheet(AppSheet.EditFoodItem(it)) },
+                                        onDeleteItem = viewModel::deleteFoodCatalogItem,
+                                        onImportJson = { importFoodJsonLauncher.launch(arrayOf("application/json", "text/json", "text/plain", "*/*")) },
+                                        onExportJson = { viewModel.exportFoodCatalogJson { foodJsonToShare = it } },
+                                        onCopyAiPrompt = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("BudgetMeals AI food catalog instructions", com.budgetmeals.app.data.FoodCatalogJsonCodec.prompt(context)))
+                                            viewModel.notify("AI catalog instructions copied")
+                                        },
+                                    )
 
-                                "expenses" -> ExpensesScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddExpense = { openSheet(AppSheet.AddExpense) },
-                                    onEditExpense = { openSheet(AppSheet.EditExpense(it)) },
-                                    onDeleteExpense = viewModel::deleteExpense,
-                                    onAddCategory = { openSheet(AppSheet.AddCategory) },
-                                )
+                                    "expenses" -> ExpensesScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onEditExpense = { openSheet(AppSheet.EditExpense(it)) },
+                                        onDeleteExpense = viewModel::deleteExpense,
+                                        onAddCategory = { openSheet(AppSheet.AddCategory) },
+                                    )
 
-                                "spares" -> SparesScreen(
-                                    snapshot = uiState.snapshot,
-                                    onBack = { detailRoute = null },
-                                    onAddSpares = { openSheet(AppSheet.AddSpares) },
-                                    onSaveToday = viewModel::saveTodayToSpares,
-                                )
+                                    "spares" -> SparesScreen(
+                                        snapshot = uiState.snapshot,
+                                        onBack = { detailRoute = null },
+                                        onSaveToday = viewModel::saveTodayToSpares,
+                                    )
+                                }
                             }
                         }
                     }
@@ -802,7 +770,8 @@ fun BudgetMealsApp(
             AnimatedContent(
                 targetState = currentSheet,
                 transitionSpec = {
-                    Motion.SheetContentEnter togetherWith Motion.SheetContentExit
+                    (Motion.SheetContentEnter togetherWith Motion.SheetContentExit)
+                        .using(SizeTransform(clip = false) { _, _ -> Motion.CardExpandTween })
                 },
                 label = "sheetContentTransition",
             ) { activeSheet ->
@@ -870,17 +839,8 @@ private fun InteractiveBottomBar(
             val pillHeight = 32.dp
 
             val targetPosition = scrollProgress.coerceIn(0f, (tabCount - 1).toFloat())
-            val animatedPosition by animateFloatAsState(
-                targetValue = targetPosition,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-                label = "navPillPosition",
-            )
-
-            // Animated sliding capsule/pill indicator
-            val pillOffset = (tabWidth * animatedPosition) + ((tabWidth - pillWidth) / 2)
+            // Follow the pager directly so dragging and the indicator never drift apart.
+            val pillOffset = (tabWidth * targetPosition) + ((tabWidth - pillWidth) / 2)
             Box(
                 modifier = Modifier
                     .offset(x = pillOffset, y = 6.dp)
@@ -893,7 +853,7 @@ private fun InteractiveBottomBar(
 
             // Tabs row
             Row(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().selectableGroup(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 MainTab.entries.forEach { tab ->
@@ -924,17 +884,13 @@ private fun InteractiveTabItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
-    // Bouncy scale on selection or touch press
     val scale by animateFloatAsState(
         targetValue = when {
-            isPressed -> 0.88f
-            selected -> 1.12f
+            isPressed -> 0.94f
+            selected -> 1.04f
             else -> 1.0f
         },
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow,
-        ),
+        animationSpec = Motion.MicroSpring,
         label = "tabItemScale",
     )
 
@@ -944,7 +900,7 @@ private fun InteractiveTabItem(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
-        animationSpec = tween(durationMillis = 180),
+        animationSpec = Motion.ColorTween,
         label = "tabItemIconTint",
     )
 
@@ -954,14 +910,16 @@ private fun InteractiveTabItem(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
         },
-        animationSpec = tween(durationMillis = 180),
+        animationSpec = Motion.ColorTween,
         label = "tabItemLabelColor",
     )
 
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clickable(
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = {
@@ -998,12 +956,12 @@ private fun InteractiveTabItem(
             ) {
                 Crossfade(
                     targetState = selected,
-                    animationSpec = tween(180),
+                    animationSpec = Motion.FadeTween,
                     label = "tabIconCrossfade",
                 ) { isSel ->
                     Icon(
                         imageVector = tabIcon(tab, selected = isSel),
-                        contentDescription = tab.label,
+                        contentDescription = null,
                         tint = iconTint,
                         modifier = Modifier.size(24.dp),
                     )
@@ -1019,11 +977,6 @@ private fun InteractiveTabItem(
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = labelColor,
             maxLines = 1,
-            modifier = Modifier.graphicsLayer {
-                val labelScale = if (selected) 1.02f else 0.98f
-                scaleX = labelScale
-                scaleY = labelScale
-            },
         )
     }
 }

@@ -20,10 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -39,13 +37,13 @@ import com.budgetmeals.app.data.AppSnapshot
 import com.budgetmeals.app.data.SparesTransaction
 import com.budgetmeals.app.state.BudgetMath
 import com.budgetmeals.app.ui.theme.Spacing
+import com.budgetmeals.app.ui.theme.Motion
 import com.budgetmeals.app.ui.theme.extendedColors
 
 @Composable
 fun SparesScreen(
     snapshot: AppSnapshot,
     onBack: () -> Unit,
-    onAddSpares: () -> Unit,
     onSaveToday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -62,15 +60,6 @@ fun SparesScreen(
             ScreenHeader(
                 title = "Spares",
                 onBack = onBack,
-                action = {
-                    IconButton(onClick = onAddSpares) {
-                        Icon(
-                            AppIcons.Add,
-                            contentDescription = "Add spares transaction",
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                },
             )
         }
 
@@ -125,21 +114,6 @@ fun SparesScreen(
         // Actions
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Button(
-                    onClick = onAddSpares,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Icon(AppIcons.Savings, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add money", style = MaterialTheme.typography.labelLarge)
-                }
                 OutlinedButton(
                     onClick = onSaveToday,
                     modifier = Modifier
@@ -227,7 +201,14 @@ fun SparesScreen(
             }
         } else {
             items(sortedHistory, key = { it.id }, contentType = { "spares_row" }) { transaction ->
-                SparesRow(transaction)
+                SparesRow(
+                    transaction,
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
+                )
             }
         }
     }
@@ -288,9 +269,10 @@ private fun TreatRow(
 }
 
 @Composable
-private fun SparesRow(transaction: SparesTransaction) {
+private fun SparesRow(transaction: SparesTransaction, modifier: Modifier = Modifier) {
     val positive = transaction.amount >= 0
     SoftCard(
+        modifier = modifier,
         contentPadding = Spacing.md,
     ) {
         Row(

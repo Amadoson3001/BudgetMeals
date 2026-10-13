@@ -42,11 +42,11 @@ import androidx.compose.ui.unit.dp
 import com.budgetmeals.app.data.AppSnapshot
 import com.budgetmeals.app.data.ShoppingItem
 import com.budgetmeals.app.state.BudgetMath
+import com.budgetmeals.app.ui.theme.Motion
 
 @Composable
 fun ShoppingScreen(
     snapshot: AppSnapshot,
-    onAddItem: () -> Unit,
     onEditItem: (ShoppingItem) -> Unit,
     onBuyItem: (ShoppingItem) -> Unit,
     onToggleItem: (ShoppingItem) -> Unit,
@@ -62,13 +62,13 @@ fun ShoppingScreen(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 112.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item {
+        item(key = "header") {
             ScreenHeader(
                 title = "Shopping",
             )
         }
 
-        item {
+        item(key = "overview") {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -131,20 +131,22 @@ fun ShoppingScreen(
         }
 
         if (open.isEmpty()) {
-            item {
+            item(key = "empty") {
                 EmptyState(
                     title = "Your list is clear",
-                    message = "New purchases can be remembered for next time automatically.",
+                    message = "Tap Add item to plan your next shop. New purchases can be remembered automatically.",
                     icon = AppIcons.ShoppingCart,
-                    actionLabel = "Add something",
-                    onAction = onAddItem,
                 )
             }
         } else {
-            item { SectionHeader("To buy") }
+            item(key = "to_buy_header") { SectionHeader("To buy") }
             items(open, key = { it.id }, contentType = { "shopping_item" }) { item ->
                 ShoppingRow(
-                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null),
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     item = item,
                     onToggle = { onToggleItem(item) },
                     onEdit = { onEditItem(item) },
@@ -155,10 +157,14 @@ fun ShoppingScreen(
         }
 
         if (checked.isNotEmpty()) {
-            item { SectionHeader("Done") }
+            item(key = "done_header") { SectionHeader("Done") }
             items(checked, key = { it.id }, contentType = { "shopping_item" }) { item ->
                 ShoppingRow(
-                    modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null),
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     item = item,
                     onToggle = { onToggleItem(item) },
                     onEdit = { onEditItem(item) },

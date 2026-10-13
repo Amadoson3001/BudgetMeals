@@ -1,10 +1,12 @@
-﻿@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package com.budgetmeals.app.ui
 
 import com.budgetmeals.app.ui.icons.AppIcons
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -59,7 +61,6 @@ import com.budgetmeals.app.ui.theme.extendedColors
 fun FoodCatalogScreen(
     snapshot: AppSnapshot,
     onBack: () -> Unit,
-    onAddItem: () -> Unit,
     onEditItem: (FoodCatalogItem) -> Unit,
     onDeleteItem: (FoodCatalogItem) -> Unit,
     onImportJson: () -> Unit,
@@ -99,13 +100,6 @@ fun FoodCatalogScreen(
                 onBack = onBack,
                 action = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onAddItem) {
-                            Icon(
-                                AppIcons.Add,
-                                contentDescription = "Add food item",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
                         Box {
                             IconButton(onClick = { showMoreMenu = true }) {
                                 Icon(
@@ -262,7 +256,7 @@ fun FoodCatalogScreen(
                             if (searchQuery.isNotBlank() || selectedCategory != null) {
                                 "Try searching for a different name or clear your filters."
                             } else {
-                                "Add ingredients like eggs, tomatoes, or bread to calculate meal costs and stock."
+                                "Tap Add food to save ingredients like eggs, tomatoes, or bread and calculate meal costs and stock."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -281,14 +275,6 @@ fun FoodCatalogScreen(
                         } else {
                             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                 OutlinedButton(
-                                    onClick = onAddItem,
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Icon(AppIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Add item")
-                                }
-                                OutlinedButton(
                                     onClick = onImportJson,
                                     shape = RoundedCornerShape(12.dp),
                                 ) {
@@ -304,6 +290,11 @@ fun FoodCatalogScreen(
         } else {
             items(filteredItems, key = { it.id }, contentType = { "catalog_item" }) { item ->
                 FoodCatalogItemCard(
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     item = item,
                     snapshot = snapshot,
                     onEdit = { onEditItem(item) },
@@ -371,6 +362,11 @@ private fun FoodCatalogItemCard(
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by remember { mutableStateOf(false) }
+    val disclosureRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = Motion.SettleBackTween,
+        label = "catalogDisclosure",
+    )
     val onHandPortions = snapshot.catalogAvailablePortions[item.id] ?: 0.0
     val hasDetails = (item.conversionLabel.isNotBlank() && item.conversionLabel != "1 piece = 1 piece") ||
         item.priceOptions.isNotEmpty() ||
@@ -380,7 +376,7 @@ private fun FoodCatalogItemCard(
         !item.hasKnownPrice
 
     SoftCard(
-        modifier = modifier.animateContentSize(Motion.CardExpandTween),
+        modifier = modifier,
         onClick = {
             if (hasDetails) {
                 isExpanded = !isExpanded
@@ -449,10 +445,10 @@ private fun FoodCatalogItemCard(
                         .size(36.dp),
                 ) {
                     Icon(
-                        if (isExpanded) AppIcons.ExpandLess else AppIcons.ExpandMore,
+                        AppIcons.ExpandMore,
                         contentDescription = if (isExpanded) "Show less" else "Show more details",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = disclosureRotation },
                     )
                 }
             } else {
@@ -473,106 +469,112 @@ private fun FoodCatalogItemCard(
         }
 
         // Expanded Details (Progressive Disclosure)
-        if (isExpanded && hasDetails) {
-            HorizontalDivider(
-                color = MaterialTheme.extendedColors.cardBorder.copy(alpha = 0.5f),
-                thickness = 0.5.dp,
-                modifier = Modifier.padding(top = Spacing.sm, bottom = Spacing.xs),
-            )
+        AnimatedVisibility(
+            visible = isExpanded && hasDetails,
+            enter = Motion.ExpandEnter,
+            exit = Motion.ExpandExit,
+        ) {
+            Column {
+                HorizontalDivider(
+                    color = MaterialTheme.extendedColors.cardBorder.copy(alpha = 0.5f),
+                    thickness = 0.5.dp,
+                    modifier = Modifier.padding(top = Spacing.sm, bottom = Spacing.xs),
+                )
 
-            // Conversion / Ratio Details
-            if (item.conversionLabel.isNotBlank() && item.conversionLabel != "1 piece = 1 piece") {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp),
-                ) {
-                    Icon(
-                        AppIcons.Tune,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.tertiary,
-                    )
+                // Conversion / Ratio Details
+                if (item.conversionLabel.isNotBlank() && item.conversionLabel != "1 piece = 1 piece") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        Icon(
+                            AppIcons.Tune,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.tertiary,
+                        )
+                        Text(
+                            text = item.conversionLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Warning / Price Options / Pack Purchase
+                if (!item.hasKnownPrice) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                        Icon(
+                            AppIcons.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                        Text(
+                            text = "Price needs confirmation",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                } else if (item.priceOptions.isNotEmpty()) {
                     Text(
-                        text = item.conversionLabel,
+                        text = "Sizes: " + item.priceOptions.joinToString(" Â· ") { "${it.name} ${BudgetMath.money(it.price)}" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
-                }
-            }
-
-            // Warning / Price Options / Pack Purchase
-            if (!item.hasKnownPrice) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 4.dp),
-                ) {
-                    Icon(
-                        AppIcons.Warning,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
+                } else if (item.purchasePrice != null && item.purchasePrice > 0.0) {
                     Text(
-                        text = "Price needs confirmation",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Medium,
+                        text = "Pack purchase: ${BudgetMath.money(item.purchasePrice)} for ${item.purchaseLabel ?: item.stockUnit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
-            } else if (item.priceOptions.isNotEmpty()) {
-                Text(
-                    text = "Sizes: " + item.priceOptions.joinToString(" Â· ") { "${it.name} ${BudgetMath.money(it.price)}" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            } else if (item.purchasePrice != null && item.purchasePrice > 0.0) {
-                Text(
-                    text = "Pack purchase: ${BudgetMath.money(item.purchasePrice)} for ${item.purchaseLabel ?: item.stockUnit}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
 
-            // Meal usage & notes
-            if (item.mealUsage.isNotBlank()) {
-                Text(
-                    text = "Used in: ${item.mealUsage}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            if (item.cleanUserNotes.isNotBlank()) {
-                Text(
-                    text = item.cleanUserNotes,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-
-            // Actions row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = Spacing.xs),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onEdit) {
-                    Icon(AppIcons.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Edit", style = MaterialTheme.typography.labelMedium)
+                // Meal usage & notes
+                if (item.mealUsage.isNotBlank()) {
+                    Text(
+                        text = "Used in: ${item.mealUsage}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
-                Spacer(Modifier.width(8.dp))
-                TextButton(onClick = onDelete) {
-                    Icon(AppIcons.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Delete", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                if (item.cleanUserNotes.isNotBlank()) {
+                    Text(
+                        text = item.cleanUserNotes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+
+                // Actions row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Spacing.xs),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = onEdit) {
+                        Icon(AppIcons.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Edit", style = MaterialTheme.typography.labelMedium)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onDelete) {
+                        Icon(AppIcons.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Delete", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }

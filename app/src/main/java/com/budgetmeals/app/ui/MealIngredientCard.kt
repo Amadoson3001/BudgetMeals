@@ -1,7 +1,7 @@
 package com.budgetmeals.app.ui
 
+import com.budgetmeals.app.ui.theme.Motion
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -137,7 +137,7 @@ internal fun MealIngredientCard(
     val estimatedText = if (estimatedCostOverflow) "Cost exceeds supported range" else "${BudgetMath.money(component.estimatedCost)} est."
 
     Card(
-        modifier = modifier.fillMaxWidth().animateContentSize().testTag("ingredient_card_${component.id}"),
+        modifier = modifier.fillMaxWidth().testTag("ingredient_card_${component.id}"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
@@ -314,7 +314,11 @@ internal fun MealIngredientCard(
                 )
             }
 
-            AnimatedVisibility(visible = optionsExpanded) {
+            AnimatedVisibility(
+                visible = optionsExpanded,
+                enter = Motion.ExpandEnter,
+                exit = Motion.ExpandExit,
+            ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(top = 5.dp, bottom = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),

@@ -30,12 +30,12 @@ import com.budgetmeals.app.data.ExpenseCategory
 import com.budgetmeals.app.state.BudgetMath
 import com.budgetmeals.app.ui.icons.AppIcons
 import com.budgetmeals.app.ui.theme.extendedColors
+import com.budgetmeals.app.ui.theme.Motion
 
 @Composable
 fun ExpensesScreen(
     snapshot: AppSnapshot,
     onBack: () -> Unit,
-    onAddExpense: () -> Unit,
     onEditExpense: (Expense) -> Unit,
     onDeleteExpense: (Expense) -> Unit,
     onAddCategory: () -> Unit,
@@ -57,9 +57,6 @@ fun ExpensesScreen(
             ScreenHeader(
                 title = "Expenses",
                 onBack = onBack,
-                action = {
-                    IconButton(onClick = onAddExpense) { Icon(AppIcons.Add, contentDescription = "Add expense") }
-                },
             )
         }
 
@@ -98,26 +95,36 @@ fun ExpensesScreen(
         }
 
         items(categories, key = { it.id }, contentType = { "category_card" }) { category ->
-            CategoryBudgetCard(category, snapshot)
+            CategoryBudgetCard(
+                category, snapshot,
+                modifier = Modifier.animateItem(
+                    fadeInSpec = Motion.FadeTween,
+                    placementSpec = Motion.PlacementSpring,
+                    fadeOutSpec = Motion.FadeTween,
+                ),
+            )
         }
 
         item {
-            SectionHeader("Recent transactions", actionLabel = "Add", onAction = onAddExpense)
+            SectionHeader("Recent transactions")
         }
 
         if (monthTransactions.isEmpty()) {
             item {
                 EmptyState(
                     title = "No expenses yet",
-                    message = "Use the plus button for internet, calling, or anything that is not food.",
+                    message = "Tap Add expense to record internet, calling, or other spending.",
                     icon = AppIcons.ReceiptLong,
-                    actionLabel = "Log an expense",
-                    onAction = onAddExpense,
                 )
             }
         } else {
             items(monthTransactions, key = { it.id }, contentType = { "expense_row" }) { expense ->
                 ExpenseRow(
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = Motion.FadeTween,
+                        placementSpec = Motion.PlacementSpring,
+                        fadeOutSpec = Motion.FadeTween,
+                    ),
                     expense = expense,
                     category = categories.firstOrNull { it.id == expense.categoryId },
                     onEdit = { onEditExpense(expense) },
@@ -156,10 +163,10 @@ fun ExpensesScreen(
 }
 
 @Composable
-private fun CategoryBudgetCard(category: ExpenseCategory, snapshot: AppSnapshot) {
+private fun CategoryBudgetCard(category: ExpenseCategory, snapshot: AppSnapshot, modifier: Modifier = Modifier) {
     val spent = BudgetMath.categorySpent(snapshot, category.id)
     val progress = BudgetMath.percent(spent, category.monthlyBudget).toFloat()
-    SoftCard(contentPadding = 14.dp) {
+    SoftCard(modifier = modifier, contentPadding = 14.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconBadge(
                 icon = when (category.icon.lowercase()) {
