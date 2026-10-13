@@ -80,18 +80,14 @@ internal fun MealIngredientCard(
     var optionsExpanded by rememberSaveable(component.id) { mutableStateOf(false) }
 
     // Preserve raw text for our own valid model updates, while reflecting parent-side edits.
-    var lastObserved by remember(component.id) { mutableStateOf(component) }
     var pendingEmission by remember(component.id) { mutableStateOf<MealComponent?>(null) }
-    SideEffect {
-        if (component != lastObserved) {
-            if (component != pendingEmission) {
-                quantityText = component.quantity.cleanNumber()
-                priceText = component.costPerUnit.cleanNumber()
-                unitText = component.unit
-            }
-            lastObserved = component
-            pendingEmission = null
+    LaunchedEffect(component) {
+        if (component != pendingEmission) {
+            quantityText = component.quantity.cleanNumber()
+            priceText = component.costPerUnit.cleanNumber()
+            unitText = component.unit
         }
+        pendingEmission = null
     }
 
     val quantity = quantityText.asDoubleOrNull()

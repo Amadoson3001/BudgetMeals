@@ -4,6 +4,12 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 
 class BudgetDatabase(context: Context) : BudgetDao(context) {
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+        db.enableWriteAheadLogging()
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """

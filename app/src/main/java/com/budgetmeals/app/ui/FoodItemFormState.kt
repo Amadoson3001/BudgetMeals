@@ -1,8 +1,10 @@
 package com.budgetmeals.app.ui
 
+import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
 import com.budgetmeals.app.data.FoodCatalogItem
 import com.budgetmeals.app.data.FoodMeasurementCodec
 import com.budgetmeals.app.data.FoodMeasurementType
@@ -350,6 +352,65 @@ class FoodItemFormState(
             mealUsage = mealUsage.trim(),
             priceKnown = finalPurchasePrice != null || finalDefaultCost > 0.0,
             conversionKnown = finalPortionsPerStock > 0.0,
+        )
+    }
+
+    companion object {
+        fun Saver(existing: FoodCatalogItem?): Saver<FoodItemFormState, Bundle> = Saver(
+            save = { state ->
+                Bundle().apply {
+                    putString("name", state.name)
+                    putString("category", state.category.name)
+                    putString("portionUnit", state.portionUnit)
+                    putString("defaultCost", state.defaultCost)
+                    putString("stockUnit", state.stockUnit)
+                    putString("portionsPerStockUnit", state.portionsPerStockUnit)
+                    putString("notes", state.notes)
+                    putString("mealUsage", state.mealUsage)
+                    putString("purchasePrice", state.purchasePrice)
+                    putString("purchaseQuantity", state.purchaseQuantity)
+                    putString("selectedMenuCategory", state.selectedMenuCategory)
+                    putString("appliedPresetName", state.appliedPresetName)
+                    putBoolean("isSuggestionsDismissed", state.isSuggestionsDismissed)
+                    putString("standardStyle", state.standardStyle.name)
+                    putString("packagePrice", state.packagePrice)
+                    putString("measurementMode", state.measurementMode.name)
+                    putString("gramsPerSpoon", state.gramsPerSpoon)
+                    putString("spoonUnitName", state.spoonUnitName)
+                    putString("smallPrice", state.smallPrice)
+                    putString("mediumPrice", state.mediumPrice)
+                    putString("largePrice", state.largePrice)
+                    putString("containerGrams", state.containerGrams)
+                    putString("containerPrice", state.containerPrice)
+                }
+            },
+            restore = { saved ->
+                FoodItemFormState(existing).apply {
+                    saved.getString("name")?.let { name = it }
+                    saved.getString("category")?.let { runCatching { category = ItemCategory.valueOf(it) } }
+                    saved.getString("portionUnit")?.let { portionUnit = it }
+                    saved.getString("defaultCost")?.let { defaultCost = it }
+                    saved.getString("stockUnit")?.let { stockUnit = it }
+                    saved.getString("portionsPerStockUnit")?.let { portionsPerStockUnit = it }
+                    saved.getString("notes")?.let { notes = it }
+                    saved.getString("mealUsage")?.let { mealUsage = it }
+                    saved.getString("purchasePrice")?.let { purchasePrice = it }
+                    saved.getString("purchaseQuantity")?.let { purchaseQuantity = it }
+                    saved.getString("selectedMenuCategory")?.let { selectedMenuCategory = it }
+                    appliedPresetName = saved.getString("appliedPresetName")
+                    isSuggestionsDismissed = saved.getBoolean("isSuggestionsDismissed")
+                    saved.getString("standardStyle")?.let { runCatching { standardStyle = StandardItemStyle.valueOf(it) } }
+                    saved.getString("packagePrice")?.let { packagePrice = it }
+                    saved.getString("measurementMode")?.let { runCatching { measurementMode = MeasurementMode.valueOf(it) } }
+                    saved.getString("gramsPerSpoon")?.let { gramsPerSpoon = it }
+                    saved.getString("spoonUnitName")?.let { spoonUnitName = it }
+                    saved.getString("smallPrice")?.let { smallPrice = it }
+                    saved.getString("mediumPrice")?.let { mediumPrice = it }
+                    saved.getString("largePrice")?.let { largePrice = it }
+                    saved.getString("containerGrams")?.let { containerGrams = it }
+                    saved.getString("containerPrice")?.let { containerPrice = it }
+                }
+            }
         )
     }
 }

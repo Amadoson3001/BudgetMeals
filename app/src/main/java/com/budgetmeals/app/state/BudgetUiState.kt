@@ -23,4 +23,5 @@ data class BudgetUiState(
     val snapshot: AppSnapshot = AppSnapshot(),
     val isLoading: Boolean = true,
     val message: String? = null,
+    val loadError: String? = null,
 )

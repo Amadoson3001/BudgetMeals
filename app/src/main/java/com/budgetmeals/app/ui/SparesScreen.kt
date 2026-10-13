@@ -82,7 +82,7 @@ fun SparesScreen(
                     )
                     if (streak > 0) {
                         StatusPill(
-                            text = "$streak day streak ðŸ”¥",
+                            text = "$streak day streak 🔥",
                             color = MaterialTheme.colorScheme.secondary,
                         )
                     }

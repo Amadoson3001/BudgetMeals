@@ -179,11 +179,10 @@ internal fun TemplateFormSheet(
 
     val latestRequestDismiss by rememberUpdatedState<() -> Unit>({ requestDismiss() })
     val stableGuard = remember { { latestRequestDismiss() } }
-    val latestGuardChanged by rememberUpdatedState(onDismissGuardChanged)
-    DisposableEffect(Unit) {
-        onDispose { latestGuardChanged(null) }
+    DisposableEffect(hasUnsavedChanges, isSaving, isDeleting) {
+        onDismissGuardChanged(if (hasUnsavedChanges || isSaving || isDeleting) stableGuard else null)
+        onDispose { onDismissGuardChanged(null) }
     }
-    SideEffect { onDismissGuardChanged(if (hasUnsavedChanges || isSaving || isDeleting) stableGuard else null) }
     BackHandler(enabled = hasUnsavedChanges || isSaving || isDeleting) {
         requestDismiss()
     }

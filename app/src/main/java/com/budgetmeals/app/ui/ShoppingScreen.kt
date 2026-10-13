@@ -114,7 +114,7 @@ fun ShoppingScreen(
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "${open.size} ${if (open.size == 1) "item" else "items"} Ã‚Â· ",
+                                    "${open.size} ${if (open.size == 1) "item" else "items"} · ",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextSecondary,
                                 )
@@ -230,7 +230,7 @@ private fun ShoppingRow(
                             color = if (item.isChecked) TextMuted else TextSecondary,
                         )
                         Text(
-                            "Ã‚Â·",
+                            "·",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                         )

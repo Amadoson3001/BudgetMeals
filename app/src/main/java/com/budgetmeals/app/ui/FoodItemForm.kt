@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +52,7 @@ fun FoodItemFormSheet(
     viewModel: BudgetViewModel,
     onDismiss: () -> Unit,
 ) {
-    val state = remember(existing?.id) { FoodItemFormState(existing) }
+    val state = rememberSaveable(existing?.id, saver = FoodItemFormState.Saver(existing)) { FoodItemFormState(existing) }
     with(state) {
         val cleanQuery = name.trim().lowercase()
         val isAutoFilled = appliedPresetName != null && name.equals(appliedPresetName, ignoreCase = true)

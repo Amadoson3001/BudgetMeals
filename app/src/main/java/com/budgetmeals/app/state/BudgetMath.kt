@@ -18,6 +18,8 @@ import kotlin.math.roundToInt
 object BudgetMath {
     private val shortDateFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.US)
     private val weekdayFormatter = DateTimeFormatter.ofPattern("EEE", Locale.US)
+    const val CURRENCY_EPSILON = 0.01
+    const val QUANTITY_EPSILON = 0.0001
 
     fun money(value: Double, decimals: Int? = null): String {
         if (decimals != null) {
@@ -38,8 +40,8 @@ object BudgetMath {
 
     fun compactMoney(value: Double): String {
         val rounded = value.roundToInt()
-        return if (rounded % 100 == 0 && rounded >= 100) {
-            "${rounded / 100}k"
+        return if (rounded % 1000 == 0 && rounded >= 1000) {
+            "${rounded / 1000}k"
         } else {
             rounded.toString()
         }
@@ -78,7 +80,7 @@ object BudgetMath {
     fun foodSpentOn(date: LocalDate, snapshot: AppSnapshot): Double {
         val categoryIds = snapshot.categories.filter { it.isFood }.map { it.id }.toSet()
         return snapshot.expenses
-            .filter { it.date == date && it.categoryId in categoryIds }
+            .filter { it.date == date && it.categoryId in categoryIds && !it.isBudgetTransfer }
             .sumOf { it.amount }
             .coerceAtLeast(0.0)
     }
@@ -165,7 +167,7 @@ object BudgetMath {
         }
         if (components.isEmpty()) return 0.0
         val stockComponents = components.filter { it.useStock }
-        if (stockComponents.isEmpty()) return 1.0
+        if (stockComponents.isEmpty()) return 0.0
         val remainingPortions = snapshot.catalogAvailablePortions.toMutableMap()
         val covered = stockComponents.count { component ->
             val catalog = if (component.catalogId != null) {
@@ -384,7 +386,7 @@ object BudgetMath {
             .map { it.date }
             .toSet()
         var streak = 0
-        var cursor = today
+        var cursor = if (dates.contains(today)) today else today.minusDays(1)
         while (dates.contains(cursor)) {
             streak++
             cursor = cursor.minusDays(1)

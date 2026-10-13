@@ -63,11 +63,11 @@ data class FoodCatalogItem(
     val priceKnown: Boolean = true,
     val conversionKnown: Boolean = true,
 ) {
-    val measurement: FoodMeasurementType by lazy(LazyThreadSafetyMode.NONE) {
+    val measurement: FoodMeasurementType by lazy(LazyThreadSafetyMode.PUBLICATION) {
         FoodMeasurementCodec.decodeMeasurement(notes, name, portionUnit, stockUnit)
     }
 
-    val cleanUserNotes: String by lazy(LazyThreadSafetyMode.NONE) {
+    val cleanUserNotes: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
         FoodMeasurementCodec.extractUserNotes(notes)
     }
 
@@ -82,7 +82,7 @@ data class FoodCatalogItem(
      * [portionsPerStockUnit] and the spoon measurement. Stock quantities are stored in
      * [baseUnit], so this is what makes "1000 g of tomatoes" and "6 pieces per kg" agree.
      */
-    val conversion: CatalogConversion by lazy(LazyThreadSafetyMode.NONE) {
+    val conversion: CatalogConversion by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val spoonGrams = (measurement as? FoodMeasurementType.SpoonsToGrams)?.gramsPerSpoon
         Units.catalogConversion(stockUnit, portionUnit, portionsPerStockUnit, spoonGrams)
     }
@@ -121,7 +121,7 @@ data class FoodCatalogItem(
             else -> null
         }
 
-    val priceRangeLabel: String? by lazy(LazyThreadSafetyMode.NONE) {
+    val priceRangeLabel: String? by lazy(LazyThreadSafetyMode.PUBLICATION) {
         when {
             priceOptions.size >= 2 -> {
                 val prices = priceOptions.map { it.price }.filter { it >= 0.0 }
@@ -133,7 +133,7 @@ data class FoodCatalogItem(
         }
     }
 
-    val conversionLabel: String by lazy(LazyThreadSafetyMode.NONE) {
+    val conversionLabel: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
         when {
             !hasUsableConversion -> "Conversion needs to be completed"
             else -> when (val m = measurement) {
@@ -353,7 +353,7 @@ data class MealLog(
         get() = when {
             status == MealStatus.SKIPPED || status == MealStatus.UNRECORDED -> 0.0
             cost <= 0.0 && isConsumed -> 1.0
-            else -> (consumedCost / cost).coerceIn(0.0, 1.0)
+            else -> if (cost <= 0.0) 0.0 else (consumedCost / cost).coerceIn(0.0, 1.0)
         }
 
     val foodSummary: String

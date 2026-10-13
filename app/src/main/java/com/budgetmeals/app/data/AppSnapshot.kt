@@ -19,11 +19,11 @@ data class AppSnapshot(
     val dayClosures: List<DayClosure> = emptyList(),
     val today: LocalDate = LocalDate.now(),
 ) {
-    val dayPlansByDate: Map<LocalDate, List<DailyMealPlan>> by lazy(LazyThreadSafetyMode.NONE) {
+    val dayPlansByDate: Map<LocalDate, List<DailyMealPlan>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         dayPlans.groupBy { it.date }.mapValues { (_, v) -> v.sortedBy { it.mealType.ordinal } }
     }
 
-    val dayClosuresByDate: Map<LocalDate, DayClosure> by lazy(LazyThreadSafetyMode.NONE) {
+    val dayClosuresByDate: Map<LocalDate, DayClosure> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         dayClosures.associateBy { it.date }
     }
 
@@ -32,34 +32,34 @@ data class AppSnapshot(
 
     fun dayClosure(date: LocalDate): DayClosure? = dayClosuresByDate[date]
 
-    val currentMonthExpenses: List<Expense> by lazy(LazyThreadSafetyMode.NONE) {
+    val currentMonthExpenses: List<Expense> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         expenses.filter {
             it.date.year == today.year && it.date.month == today.month && it.date <= today && !it.isBudgetTransfer
         }
     }
 
-    val recordedFoodSpentThisMonth: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val recordedFoodSpentThisMonth: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val categoryIds = categories.filter { it.isFood }.map { it.id }.toSet()
         currentMonthExpenses
             .filter { it.categoryId in categoryIds }
             .sumOf { it.amount }
     }
 
-    val foodSpentThisMonth: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val foodSpentThisMonth: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         recordedFoodSpentThisMonth.coerceAtLeast(0.0)
     }
 
-    val foodRemainingThisMonth: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val foodRemainingThisMonth: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         (settings.monthlyFoodBudget - foodSpentThisMonth - monthlyFoodTransfers).coerceAtLeast(0.0)
     }
 
-    val monthlyFoodTransfers: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val monthlyFoodTransfers: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         spares.filter { it.date.year == today.year && it.date.month == today.month &&
             (it.category == "daily_savings" || it.category == "daily_savings_spent")
         }.sumOf { it.amount }
     }
 
-    val todayFoodSpent: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val todayFoodSpent: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val foodCategoryIds = categories.filter { it.isFood }.map { it.id }.toSet()
         currentMonthExpenses
             .filter { it.date == today && it.categoryId in foodCategoryIds }
@@ -67,30 +67,30 @@ data class AppSnapshot(
             .coerceAtLeast(0.0)
     }
 
-    val todayFoodRemaining: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val todayFoodRemaining: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val todayTransfers = spares.filter { it.date == today &&
             (it.category == "daily_savings" || it.category == "daily_savings_spent")
         }.sumOf { it.amount }
         minOf((settings.dailyFoodBudget - todayFoodSpent - todayTransfers).coerceAtLeast(0.0), foodRemainingThisMonth)
     }
 
-    val sparesBalance: Double by lazy(LazyThreadSafetyMode.NONE) {
+    val sparesBalance: Double by lazy(LazyThreadSafetyMode.PUBLICATION) {
         spares.sumOf { it.amount }
     }
 
-    val openShoppingCount: Int by lazy(LazyThreadSafetyMode.NONE) {
+    val openShoppingCount: Int by lazy(LazyThreadSafetyMode.PUBLICATION) {
         shopping.count { !it.isChecked }
     }
 
-    val lowStock: List<StockItem> by lazy(LazyThreadSafetyMode.NONE) {
+    val lowStock: List<StockItem> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         stock.filter { !it.isFinished && it.isLow }.sortedBy { it.daysRemaining }
     }
 
-    val foodCatalogById: Map<String, FoodCatalogItem> by lazy(LazyThreadSafetyMode.NONE) {
+    val foodCatalogById: Map<String, FoodCatalogItem> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         foodCatalog.associateBy { it.id }
     }
 
-    val foodCatalogByName: Map<String, FoodCatalogItem> by lazy(LazyThreadSafetyMode.NONE) {
+    val foodCatalogByName: Map<String, FoodCatalogItem> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val map = HashMap<String, FoodCatalogItem>(foodCatalog.size * 2)
         for (item in foodCatalog) {
             map[item.name.lowercase(Locale.US)] = item
@@ -98,7 +98,7 @@ data class AppSnapshot(
         map
     }
 
-    val stockByCatalogId: Map<String, List<StockItem>> by lazy(LazyThreadSafetyMode.NONE) {
+    val stockByCatalogId: Map<String, List<StockItem>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         stock.mapNotNull { item -> item.catalogId?.let { it to item } }
             .groupBy(keySelector = { it.first }, valueTransform = { it.second })
     }
@@ -144,7 +144,7 @@ data class AppSnapshot(
         )
     }
 
-    val catalogAvailablePortions: Map<String, Double> by lazy(LazyThreadSafetyMode.NONE) {
+    val catalogAvailablePortions: Map<String, Double> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         val result = HashMap<String, Double>(foodCatalog.size * 2)
         for (catalog in foodCatalog) {
             if (!catalog.hasUsableConversion) continue
@@ -153,11 +153,11 @@ data class AppSnapshot(
         result
     }
 
-    val currentMonthExpensesByCategoryId: Map<String, Double> by lazy(LazyThreadSafetyMode.NONE) {
+    val currentMonthExpensesByCategoryId: Map<String, Double> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         currentMonthExpenses.groupBy { it.categoryId }.mapValues { (_, list) -> list.sumOf { it.amount } }
     }
 
-    val todayLogs: Map<MealType, MealLog> by lazy(LazyThreadSafetyMode.NONE) {
+    val todayLogs: Map<MealType, MealLog> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         mealLogs
             .filter { it.date == today }
             .groupBy { it.mealType }

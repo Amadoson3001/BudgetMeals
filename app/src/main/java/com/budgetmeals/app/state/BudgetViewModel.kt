@@ -20,7 +20,6 @@ import com.budgetmeals.app.data.StockItem
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -57,8 +56,12 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppThemeMode.SYSTEM)
 
     init {
-        viewModelScope.coroutineContext[Job]?.invokeOnCompletion { repository.close() }
         refresh()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        repository.close()
     }
 
     fun refresh() {
@@ -519,5 +522,6 @@ class BudgetViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(message = message) }
     }
 
+    // Formats whole currency amounts without " EGP" suffix for inline status messages (unlike BudgetMath.money)
     private fun money(value: Double): String = String.format(java.util.Locale.US, "%.0f", value)
 }

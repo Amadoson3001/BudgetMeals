@@ -232,7 +232,7 @@ private fun BudgetCorrectionRow(expense: Expense, onDelete: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "${BudgetMath.formatDate(expense.date)} Â· ${expense.description}",
+                "${BudgetMath.formatDate(expense.date)} · ${expense.description}",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 maxLines = 2,

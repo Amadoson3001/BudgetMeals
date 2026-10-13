@@ -225,8 +225,8 @@ private fun ExpenseRow(
             Column(Modifier.weight(1f)) {
                 Text(expense.description.ifBlank { category?.name ?: "Expense" }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    if (expense.isMealExpense) "${BudgetMath.formatDate(expense.date)} Â· Change through meal review"
-                    else "${category?.name ?: "Other"} Â· ${BudgetMath.formatDate(expense.date)}",
+                    if (expense.isMealExpense) "${BudgetMath.formatDate(expense.date)} · Change through meal review"
+                    else "${category?.name ?: "Other"} · ${BudgetMath.formatDate(expense.date)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
