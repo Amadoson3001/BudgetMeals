@@ -101,13 +101,8 @@ internal fun DayReviewSheet(
             }
         }
     }
-    var choices by remember(selectedDate) { mutableStateOf(initialChoices) }
-    var leftoverPercent by remember(selectedDate) { mutableStateOf(initialLeftoverPercent) }
-
-    LaunchedEffect(selectedDate, plan, logs) {
-        choices = initialChoices
-        leftoverPercent = initialLeftoverPercent
-    }
+    var choices by remember(selectedDate, plan, logs) { mutableStateOf(initialChoices) }
+    var leftoverPercent by remember(selectedDate, plan, logs) { mutableStateOf(initialLeftoverPercent) }
 
     val wasClosed = snapshot.dayClosure(selectedDate) != null
 
@@ -247,8 +242,8 @@ internal fun DayReviewSheet(
                         val availabilityText = when {
                             availability == null -> ""
                             availability.hasUsableStock ->
-                                " Â· ${availability.portions.cleanNumber()} available (${availability.baseQuantity.cleanNumber()} ${availability.baseUnit})"
-                            availability.note != null -> " Â· ${availability.note}"
+                                " · ${availability.portions.cleanNumber()} available (${availability.baseQuantity.cleanNumber()} ${availability.baseUnit})"
+                            availability.note != null -> " · ${availability.note}"
                             else -> ""
                         }
                         Text(
@@ -320,9 +315,9 @@ internal fun DayReviewSheet(
                     }
                     val subtitle = when (choice) {
                         MealReviewChoice.FULL -> "Consumed ${BudgetMath.money(consumed)}"
-                        MealReviewChoice.LEFTOVERS -> "Consumed ${BudgetMath.money(consumed)} Â· left over ${BudgetMath.money((template.cost - consumed).coerceAtLeast(0.0))}"
-                        MealReviewChoice.SKIPPED -> "Skipped Â· ${BudgetMath.money(template.cost)} not consumed"
-                        MealReviewChoice.UNRECORDED -> "Unrecorded Â· no meal record"
+                        MealReviewChoice.LEFTOVERS -> "Consumed ${BudgetMath.money(consumed)} · left over ${BudgetMath.money((template.cost - consumed).coerceAtLeast(0.0))}"
+                        MealReviewChoice.SKIPPED -> "Skipped · ${BudgetMath.money(template.cost)} not consumed"
+                        MealReviewChoice.UNRECORDED -> "Unrecorded · no meal record"
                     }
                     Text(
                         subtitle,

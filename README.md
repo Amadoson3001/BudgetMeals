@@ -52,6 +52,20 @@ For the one-time move from an app installed with an older key, verify a data bac
 
 Android's [app signing documentation](https://developer.android.com/studio/publish/app-signing) explains why updates must use the same signing identity.
 
+## Testing
+
+Run the automated unit test suite:
+
+```powershell
+.\run_tests.bat
+```
+
+or:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest
+```
+
 ## Checks
 
 Build the debug APK and run Android lint:

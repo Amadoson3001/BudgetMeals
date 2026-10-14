@@ -524,7 +524,7 @@ private fun FoodCatalogItemCard(
                     }
                 } else if (item.priceOptions.isNotEmpty()) {
                     Text(
-                        text = "Sizes: " + item.priceOptions.joinToString(" Â· ") { "${it.name} ${BudgetMath.money(it.price)}" },
+                        text = "Sizes: " + item.priceOptions.joinToString(" · ") { "${it.name} ${BudgetMath.money(it.price)}" },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp),

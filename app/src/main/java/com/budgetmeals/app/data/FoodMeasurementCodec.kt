@@ -215,13 +215,12 @@ object FoodMeasurementCodec {
             if (result != null) return result
         }
 
-        // Automatic smart inference from food name or units if not in JSON:
-        val lowerName = name.lowercase().trim()
+        // Automatic smart inference from units if not in JSON:
         val lowerPortion = portionUnit.lowercase().trim()
-        if (lowerName.contains("cheese") || lowerPortion.contains("spoon")) {
+        if (lowerPortion.contains("spoon")) {
             return FoodMeasurementType.SpoonsToGrams(gramsPerSpoon = 10.0, spoonUnitName = "spoon")
         }
-        if (lowerName.contains("chips") || lowerName.contains("crisps") || lowerPortion.contains("size")) {
+        if (lowerPortion.contains("size")) {
             return FoodMeasurementType.TieredSizes(
                 listOf(
                     TieredSize("Small", 10.0),
